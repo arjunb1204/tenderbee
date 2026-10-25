@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { searchTenders, getTenderDetail, uploadTenderPdf, TenderItem } from "@/lib/api";
+import { searchTenders, getTenderDetail, uploadTenderPdf, intakeTender, TenderItem } from "@/lib/api";
 import { formatINR } from "@/lib/utils";
 
 function TendersListInner() {
@@ -29,6 +29,15 @@ function TendersListInner() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  // Live Scraper / Intake modal state
+  const [isScraperModalOpen, setIsScraperModalOpen] = useState<boolean>(false);
+  const [scraperInput, setScraperInput] = useState<string>("");
+  const [forceRefresh, setForceRefresh] = useState<boolean>(false);
+  const [isScraping, setIsScraping] = useState<boolean>(false);
+  const [scraperStatus, setScraperStatus] = useState<string>("");
+  const [scraperError, setScraperError] = useState<string | null>(null);
+  const [scraperSuccessData, setScraperSuccessData] = useState<any | null>(null);
 
   // Fetch initial tenders on load
   const loadTenders = async (q?: string) => {
@@ -59,11 +68,18 @@ function TendersListInner() {
     }
   }, [initialQuery]);
 
-  // Handle live search
+  // Handle live search (with automatic URL detection)
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
+    const query = searchQuery.trim();
+    if (query.startsWith("http://") || query.startsWith("https://")) {
+      setScraperInput(query);
+      setIsScraperModalOpen(true);
+      handleRunScraper(query);
+      return;
+    }
     startTransition(() => {
-      loadTenders(searchQuery);
+      loadTenders(query);
     });
   };
 
@@ -111,6 +127,50 @@ function TendersListInner() {
     }
   };
 
+  // Handle Live Portal Scraper execution
+  const handleRunScraper = async (customIdentifier?: string, customForce?: boolean) => {
+    const target = (customIdentifier || scraperInput).trim();
+    if (!target) return;
+
+    setIsScraping(true);
+    setScraperError(null);
+    setScraperSuccessData(null);
+    setScraperStatus("Connecting to portal & resolving tender notice...");
+
+    const force = customForce !== undefined ? customForce : forceRefresh;
+
+    try {
+      const progressTimer = setTimeout(() => {
+        setScraperStatus("Solving CAPTCHA & extracting verbatim clauses...");
+      }, 1200);
+
+      const res = await intakeTender(target, force);
+      clearTimeout(progressTimer);
+
+      if (res.success) {
+        setScraperStatus("Tender successfully ingested & RulePack synthesized!");
+        setScraperSuccessData(res);
+        await loadTenders();
+        setTimeout(() => {
+          setIsScraperModalOpen(false);
+          setIsScraping(false);
+          setScraperStatus("");
+          setScraperInput("");
+          const lookupKey = res.tender_number || res.tender_id;
+          if (lookupKey) {
+            handleInspect(lookupKey);
+          }
+        }, 1000);
+      } else {
+        setIsScraping(false);
+        setScraperError(res.error || "Portal scraping failed. Please verify the URL or Tender Number.");
+      }
+    } catch (err: any) {
+      setIsScraping(false);
+      setScraperError(err.message || "Portal scraper encountered a connection error.");
+    }
+  };
+
   // Filter tenders by portal chip
   const filteredTenders = tenders.filter((t) => {
     if (selectedPortal === "All") return true;
@@ -152,6 +212,17 @@ function TendersListInner() {
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    setScraperError(null);
+                    setScraperSuccessData(null);
+                    setIsScraperModalOpen(true);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary text-white text-xs font-bold shadow-md hover:bg-primary/90 transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base animate-pulse">satellite_alt</span>
+                  <span>Live Portal Scraper</span>
+                </button>
                 <button
                   onClick={() => setIsUploadModalOpen(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary text-white text-xs font-bold shadow-md hover:bg-secondary/90 transition-all cursor-pointer"
@@ -273,16 +344,32 @@ function TendersListInner() {
                 <p className="text-xs text-on-surface-variant max-w-md">
                   Try adjusting your search criteria, searching for a tender number (e.g. &apos;141349&apos; or &apos;2026_HRY_530295_1&apos;), or uploading a tender PDF.
                 </p>
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setSelectedPortal("All");
-                    loadTenders("");
-                  }}
-                  className="mt-2 px-4 py-2 rounded-full neu-button text-xs font-bold text-primary cursor-pointer"
-                >
-                  Reset All Filters
-                </button>
+                <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
+                  {searchQuery && (
+                    <button
+                      onClick={() => {
+                        setScraperInput(searchQuery);
+                        setScraperError(null);
+                        setScraperSuccessData(null);
+                        setIsScraperModalOpen(true);
+                      }}
+                      className="px-4 py-2 rounded-full bg-secondary text-white text-xs font-bold shadow-md hover:bg-secondary/90 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-base">satellite_alt</span>
+                      <span>Scrape &quot;{searchQuery}&quot; Live</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setSelectedPortal("All");
+                      loadTenders("");
+                    }}
+                    className="px-4 py-2 rounded-full neu-button text-xs font-bold text-primary cursor-pointer"
+                  >
+                    Reset All Filters
+                  </button>
+                </div>
               </div>
             )}
 
@@ -640,6 +727,201 @@ function TendersListInner() {
                 </Link>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* LIVE PORTAL SCRAPER / INTAKE MODAL */}
+      {/* ========================================================================= */}
+      {isScraperModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface-container-lowest neu-flat rounded-3xl w-full max-w-xl p-6 sm:p-8 flex flex-col gap-5 shadow-2xl">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span className="text-[10px] uppercase font-bold text-emerald-700 tracking-wider">
+                    Universal Multi-Engine Portal Scraper
+                  </span>
+                </div>
+                <h2 className="font-serif text-2xl font-bold text-primary">Live Tender Intake</h2>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  Scrape tenders in real-time from GeM, CPPP, State Portals (Bihar eProc2, Haryana), or Infralens mirrors.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isScraping) {
+                    setIsScraperModalOpen(false);
+                    setScraperError(null);
+                    setScraperStatus("");
+                  }
+                }}
+                disabled={isScraping}
+                className="w-8 h-8 rounded-full neu-button flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            {/* Quick-Fill Presets */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
+                Quick-Select Verified Tenders:
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { label: "GeM Bid", val: "GEM/2026/B/894210" },
+                  { label: "Infralens URL", val: "https://tenders.infralens.in/tender/GEM-2026-B-894210" },
+                  { label: "Bihar eProc2", val: "BIH/EPROC2/141349" },
+                  { label: "Haryana CPPP", val: "2026_HRY_530295_1" },
+                ].map((preset) => (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    disabled={isScraping}
+                    onClick={() => setScraperInput(preset.val)}
+                    className="px-2.5 py-1 rounded-full text-[11px] font-mono neu-button hover:bg-surface-container text-on-surface-variant transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <span className="font-semibold text-primary">{preset.label}:</span> {preset.val.length > 22 ? preset.val.slice(0, 22) + "…" : preset.val}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleRunScraper();
+              }}
+              className="flex flex-col gap-4"
+            >
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-bold text-on-surface flex items-center justify-between">
+                  <span>Portal URL or Tender / Bid Reference Number</span>
+                  {scraperInput && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed font-bold">
+                      {scraperInput.toLowerCase().includes("gem")
+                        ? "Detected: GeM Portal Bid"
+                        : scraperInput.toLowerCase().includes("eproc2") || scraperInput.toLowerCase().includes("bihar")
+                        ? "Detected: eProc2 Bihar Portal"
+                        : scraperInput.toLowerCase().includes("cppp") || scraperInput.toLowerCase().includes("hry") || scraperInput.includes("_")
+                        ? "Detected: CPPP / GePNIC Portal"
+                        : scraperInput.startsWith("http")
+                        ? "Detected: Direct Portal URL"
+                        : "Detected: Tender Number"}
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
+                    link
+                  </span>
+                  <input
+                    type="text"
+                    disabled={isScraping}
+                    value={scraperInput}
+                    onChange={(e) => setScraperInput(e.target.value)}
+                    placeholder="e.g. GEM/2026/B/894210, https://tenders.infralens.in/..., or 2026_HRY_530295_1"
+                    className="w-full pl-10 pr-4 py-2.5 neu-pressed rounded-xl text-xs sm:text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all font-mono disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* Force Refresh Toggle */}
+              <div className="flex items-center gap-2">
+                <input
+                  id="forceRefreshCheck"
+                  type="checkbox"
+                  disabled={isScraping}
+                  checked={forceRefresh}
+                  onChange={(e) => setForceRefresh(e.target.checked)}
+                  className="rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                />
+                <label htmlFor="forceRefreshCheck" className="text-xs text-on-surface-variant cursor-pointer select-none">
+                  Force Re-scrape (bypass cache and re-query live government portal)
+                </label>
+              </div>
+
+              {/* Progress & Live Status View */}
+              {isScraping && (
+                <div className="p-4 rounded-2xl bg-surface neu-pressed flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin shrink-0" />
+                    <span className="text-xs font-semibold text-primary">{scraperStatus}</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    {[
+                      { step: 1, label: "Connect" },
+                      { step: 2, label: "Fetch Notice" },
+                      { step: 3, label: "Extract Clauses" },
+                      { step: 4, label: "RulePack" },
+                    ].map((s) => (
+                      <div key={s.step} className="flex flex-col items-center gap-1">
+                        <div className="w-full h-1.5 rounded-full bg-surface-container-high overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full animate-pulse w-full" />
+                        </div>
+                        <span className="text-[10px] text-on-surface-variant font-medium">{s.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Error Message Display */}
+              {scraperError && (
+                <div className="p-4 rounded-xl bg-error-container text-on-error-container text-xs flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2 font-bold">
+                    <span className="material-symbols-outlined text-base">error</span>
+                    <span>Scraper Encountered an Issue</span>
+                  </div>
+                  <p className="text-[11px] opacity-90">{scraperError}</p>
+                  <p className="text-[10px] opacity-75 mt-1">
+                    💡 Tip: If a state portal is undergoing maintenance or has a strict bot challenge, you can directly upload the tender PDF via &quot;Upload Tender PDF&quot;.
+                  </p>
+                </div>
+              )}
+
+              {/* Success Notification */}
+              {scraperSuccessData && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 text-emerald-900 border border-emerald-200 text-xs flex items-center gap-2.5">
+                  <span className="material-symbols-outlined text-emerald-600 text-lg">check_circle</span>
+                  <div className="flex flex-col">
+                    <span className="font-bold">Tender Ingested Successfully!</span>
+                    <span className="text-[11px] text-emerald-700">Opening detailed inspection workspace...</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  disabled={isScraping}
+                  onClick={() => setIsScraperModalOpen(false)}
+                  className="px-4 py-2 rounded-full neu-button text-xs font-bold text-on-surface-variant cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!scraperInput.trim() || isScraping}
+                  className="px-6 py-2.5 rounded-full bg-primary text-white text-xs font-bold shadow-md hover:bg-primary/90 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {isScraping ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Scraping Live Portal...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-base">travel_explore</span>
+                      <span>Run Live Scraper</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

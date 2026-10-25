@@ -166,6 +166,43 @@ export async function uploadTenderPdf(file: File, orgId: string = "org_default")
   }
 }
 
+export async function intakeTender(
+  identifier: string,
+  forceRefresh: boolean = false,
+  orgId: string = "org_default"
+): Promise<{
+  success: boolean;
+  is_cached?: boolean;
+  tender_id?: string;
+  tender_number?: string;
+  tender_title?: string;
+  buyer_name?: string;
+  submission_deadline?: string;
+  estimated_value_inr?: number;
+  emd_amount_inr?: number;
+  rule_pack_id?: string;
+  rule_pack?: any;
+  extraction?: any;
+  error?: string;
+  reason_code?: string;
+}> {
+  try {
+    const res = await apiFetch("/api/v1/tenders/intake/", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        identifier,
+        force_refresh: forceRefresh,
+        org_id: orgId,
+      }),
+    });
+    return await res.json();
+  } catch (err: any) {
+    console.error("API intakeTender error:", err);
+    return { success: false, error: err.message || "Failed to intake tender" };
+  }
+}
+
 export async function getDocuments(tenderId?: string): Promise<DocumentItem[]> {
   const query = tenderId ? `?tender_id=${encodeURIComponent(tenderId)}` : "";
   try {

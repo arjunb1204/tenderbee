@@ -32,7 +32,7 @@ class GeMAdapter:
         Check if the identifier is a GeM Bid Number or URL.
         """
         clean = identifier_or_url.strip()
-        if re.match(r"^GEM/\d{4}/[B|R]/\d+", clean, re.IGNORECASE):
+        if re.search(r"GEM[-_/]\d{4}[-_/][BR][-_/]\d+", clean, re.IGNORECASE):
             return True
         if "gem.gov.in" in clean.lower():
             return True
@@ -42,9 +42,12 @@ class GeMAdapter:
         """
         Fetch GeM bid details.
         """
-        # Extract GeM Bid Number
-        bid_match = re.search(r"GEM/\d{4}/[B|R]/\d+", identifier, re.IGNORECASE)
-        bid_no = bid_match.group(0).upper() if bid_match else identifier.strip()
+        # Extract GeM Bid Number (supports GEM/2026/B/894210 or GEM-2026-B-894210)
+        bid_match = re.search(r"GEM[-_/](\d{4})[-_/]([BR])[-_/](\d+)", identifier, re.IGNORECASE)
+        if bid_match:
+            bid_no = f"GEM/{bid_match.group(1)}/{bid_match.group(2).upper()}/{bid_match.group(3)}"
+        else:
+            bid_no = identifier.strip()
 
         # If a direct PDF link is provided
         if identifier.startswith("http") and identifier.lower().endswith(".pdf"):

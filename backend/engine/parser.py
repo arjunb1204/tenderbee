@@ -114,9 +114,13 @@ class TenderPDFExtractor:
 
             is_scanned = char_count < self.min_char_threshold
             if is_scanned:
-                cleaned_text, _ = OCRPolicy.ocr_page(pdf_bytes, idx)
-                cleaned_text = re.sub(r"[ \t]+", " ", cleaned_text).strip()
-            if not is_scanned:
+                try:
+                    ocr_res, _ = OCRPolicy.ocr_page(pdf_bytes, idx)
+                    if ocr_res:
+                        cleaned_text = re.sub(r"[ \t]+", " ", ocr_res).strip()
+                except Exception:
+                    pass
+            if not is_scanned or cleaned_text:
                 digital_pages += 1
 
             full_text_by_page.append((page_num, cleaned_text))

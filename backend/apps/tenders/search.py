@@ -153,6 +153,14 @@ class QueryParser:
                 logger.debug("LLM query parsing encountered exception, falling back to deterministic parser: %s", e)
 
         # Step 2: Deterministic Rule-Based Parsing
+        # Direct URL detection: preserve tender URL or extract embedded ID cleanly
+        if text.startswith("http://") or text.startswith("https://"):
+            tender_number = cls._extract_tender_number(text)
+            return TenderSearchFilter(
+                query=None if tender_number else text,
+                tender_number=tender_number,
+            )
+
         tender_number = cls._extract_tender_number(text)
         state = cls._extract_state(lower)
         category = cls._extract_category(lower)
@@ -188,7 +196,7 @@ class QueryParser:
             re.IGNORECASE,
         )
         if m_prefix:
-            cand = m_prefix.group(1).strip().rstrip(".,;:")
+            cand = m_prefix.group(1).strip().lstrip("/").rstrip(".,;:/")
             # Filter out common non-tender words if matched erroneously
             if cand.lower() not in (
                 "active", "notice", "notices", "details", "detail", "document", "documents",
@@ -206,10 +214,10 @@ class QueryParser:
         if m_cppp:
             return m_cppp.group(1)
 
-        # 4. GeM Bid Numbers: e.g. GEM/2026/B/1234567 or GEM/2025/R/12345
-        m_gem = re.search(r"\b(GEM/\d{4}/[A-Z]/\d+)\b", text, re.IGNORECASE)
+        # 4. GeM Bid Numbers: e.g. GEM/2026/B/1234567, GEM/2025/R/12345, or slug GEM-2026-B-894210
+        m_gem = re.search(r"\b(GEM[-_/](\d{4})[-_/]([A-Za-z])[-_/](\d+))\b", text, re.IGNORECASE)
         if m_gem:
-            return m_gem.group(1).upper()
+            return f"GEM/{m_gem.group(2)}/{m_gem.group(3).upper()}/{m_gem.group(4)}"
 
         # 5. Railway / IREPS / Department tender numbers with slashes: e.g. ECR/HAJIPUR/CIVIL/2026/09
         m_dept = re.search(r"\b([A-Z]{2,10}/[A-Za-z0-9_\/-]{5,})\b", text)
@@ -412,7 +420,38 @@ class TenderSearchService:
 
         total_count = len(local_results)
 
-        # 2. If no local matches, automatically trigger live procurement portal search!
+        # 2. If no local match, check if query is a specific tender identifier or portal URL,
+        # and dispatch the universal scraper intake!
+        target_ident = None
+        if raw_prompt and (raw_prompt.startswith("http://") or raw_prompt.startswith("https://")):
+            target_ident = raw_prompt.strip()
+        elif filters.tender_number:
+            target_ident = filters.tender_number.strip()
+        elif filters.query and (filters.query.startswith("http://") or filters.query.startswith("https://")):
+            target_ident = filters.query.strip()
+
+        if total_count == 0 and target_ident:
+            try:
+                from backend.apps.tenders.services import TenderService
+                service = TenderService(storage=self.storage)
+                intake_res = service.intake_tender(identifier=target_ident, org_id="org_default")
+                if intake_res.get("success"):
+                    tender_id = intake_res.get("tender_id")
+                    new_tender = self.storage.get_tender(tender_id, mode="skim")
+                    if new_tender:
+                        return {
+                            "success": True,
+                            "applied_filters": filters.model_dump(),
+                            "total_matches": 1,
+                            "page": 1,
+                            "limit": filters.limit,
+                            "source": "live_scraper_intake",
+                            "results": [new_tender],
+                        }
+            except Exception as e:
+                logger.error("Scraper intake fallback failed for %s: %s", target_ident, e)
+
+        # 3. If no local matches, automatically trigger live procurement portal search!
         if total_count == 0 and self.live_search_engine:
             logger.info("No local match found. Dispatching live portal search for filters %s", filters.model_dump())
             live_tenders = self.live_search_engine.search_live(

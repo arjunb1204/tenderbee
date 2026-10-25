@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sample bidder application extraction output",
+  "type": "object",
+  "properties": {
+    "udyam_certificate": {
+      "type": "object",
+      "x-document-type": "udyam_certificate",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "Extract the certificate status."
+        },
+        "entity_type": {
+          "type": "string",
+          "description": "Extract the bidder entity type."
+        }
+      }
+    },
+    "ca_turnover_certificate": {
+      "type": "object",
+      "x-document-type": "ca_turnover_certificate",
+      "properties": {
+        "average_turnover_inr": {
+          "type": "number",
+          "description": "Extract the average annual turnover in INR."
+        },
+        "udin": {
+          "type": "string",
+          "description": "Extract the UDIN."
+        }
+      }
+    }
+  }
+}
