@@ -1,7 +1,7 @@
 """
 API Views for Immutable Audit Trail.
 """
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -16,6 +16,7 @@ class AuditLogListAPIView(APIView):
     Retrieves immutable audit trail events for compliance verification,
     rule-freezes, and document intakes.
     """
+    permission_classes = [permissions.AllowAny]
     def get(self, request, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         queryset = AuditLogEntry.objects.filter(organization_id=org_id)

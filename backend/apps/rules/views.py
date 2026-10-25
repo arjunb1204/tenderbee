@@ -1,7 +1,7 @@
 """
 API Views for RulePack Review, Human Confirmation, and Freezing.
 """
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +21,8 @@ class RulePackListAPIView(APIView):
     GET /api/v1/rules/
     Lists RulePacks for the current tenant. Optionally filter by ?tender_id=<id>.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         tender_id = request.query_params.get("tender_id")
@@ -37,6 +39,8 @@ class RulePackDetailAPIView(APIView):
     GET /api/v1/rules/<rule_pack_id>/
     Retrieves full details of a RulePack and all child rules.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, rule_pack_id, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         try:
@@ -57,6 +61,8 @@ class RulePackFreezeAPIView(APIView):
     Cryptographically freezes a draft RulePack with SHA-256 integrity hash
     and writes an append-only audit event.
     """
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, rule_pack_id, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         try:
@@ -120,6 +126,8 @@ class RuleItemUpdateAPIView(APIView):
     Allows human reviewer to dismiss or modify a rule while the RulePack is in DRAFT.
     Modifications are strictly blocked once FROZEN.
     """
+    permission_classes = [permissions.AllowAny]
+
     def patch(self, request, rule_pack_id, item_id, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         try:

@@ -9,4 +9,13 @@ def get_tenant_org_id(request) -> str:
     if getattr(request, "user", None) and getattr(request.user, "is_authenticated", False):
         if getattr(request.user, "organization_id", None):
             return str(request.user.organization_id)
-    return getattr(request, "org_id", "org_default")
+    org_id = getattr(request, "org_id", "org_default")
+    try:
+        from apps.accounts.models import Organization
+        Organization.objects.get_or_create(
+            id=org_id,
+            defaults={"name": "Default Workspace"}
+        )
+    except Exception:
+        pass
+    return org_id

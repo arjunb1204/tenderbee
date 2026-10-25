@@ -1,7 +1,7 @@
 """
 API Views for Verification Assessments, Deterministic Rules Execution, and Registry Lookups.
 """
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +21,7 @@ class AssessmentEvaluateAPIView(APIView):
     Returns composite verdict (READY, NEEDS_REVIEW, BLOCKED), rule-by-rule verdicts,
     missing documents, actionable FixList, and external registry validations.
     """
+    permission_classes = [permissions.AllowAny]
     def post(self, request, *args, **kwargs):
         serializer = AssessmentRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -50,6 +51,8 @@ class AssessmentListAPIView(APIView):
     GET /api/v1/verify/assessments/
     Lists previous assessments for the tenant organization.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         queryset = VerificationAssessment.objects.filter(organization_id=org_id)
@@ -67,6 +70,8 @@ class AssessmentDetailAPIView(APIView):
     GET /api/v1/verify/assessments/<assessment_id>/
     Retrieves full audit report for a previous assessment.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, assessment_id, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         try:

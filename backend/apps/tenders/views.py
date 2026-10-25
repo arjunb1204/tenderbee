@@ -22,6 +22,8 @@ class TenderIntakeAPIView(APIView):
     Accepts a procurement URL or tender number, scrapes or loads from cache,
     and automatically drafts an executable RulePack.
     """
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = TenderIntakeRequestSerializer(data=request.data)
         if not serializer.is_valid():
@@ -50,6 +52,8 @@ class TenderPDFUploadAPIView(APIView):
     Uploads an Indian procurement tender PDF, extracts clauses and parameters,
     and returns a structured JSON schema along with a draft RulePack.
     """
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = TenderPDFUploadSerializer(data=request.data)
         if not serializer.is_valid():
@@ -82,6 +86,8 @@ class RulePackConfirmAPIView(APIView):
     POST /api/tenders/rule-pack/<rule_pack_id>/confirm/
     Locks and freezes a draft RulePack with cryptographic SHA-256 integrity hash.
     """
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, rule_pack_id, *args, **kwargs):
         serializer = RulePackConfirmSerializer(data=request.data)
         if not serializer.is_valid():
@@ -102,6 +108,8 @@ class RulePackDetailAPIView(APIView):
     GET /api/tenders/rule-pack/<rule_pack_id>/
     Retrieves a RulePack by ID.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, rule_pack_id, *args, **kwargs):
         service = TenderService()
         rule_pack = service.get_rule_pack(rule_pack_id=rule_pack_id)

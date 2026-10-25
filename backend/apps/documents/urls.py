@@ -1,7 +1,7 @@
 """
 URL endpoints for Bidder Document Upload and Integrity Management.
 """
-from django.urls import path
+from django.urls import path, re_path
 from apps.documents.views import (
     DocumentDetailAPIView,
     DocumentListAPIView,
@@ -11,7 +11,7 @@ from apps.documents.views import (
 app_name = "documents"
 
 urlpatterns = [
-    path("", DocumentListAPIView.as_view(), name="document-list"),
-    path("upload/", DocumentUploadAPIView.as_view(), name="document-upload"),
-    path("<str:doc_id>/", DocumentDetailAPIView.as_view(), name="document-detail"),
+    re_path(r"^$", DocumentListAPIView.as_view(), name="document-list"),
+    re_path(r"^upload/?$", DocumentUploadAPIView.as_view(), name="document-upload"),
+    re_path(r"^(?P<doc_id>[^/]+)/?$", DocumentDetailAPIView.as_view(), name="document-detail"),
 ]

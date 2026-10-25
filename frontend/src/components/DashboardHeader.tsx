@@ -3,9 +3,21 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 
 export default function DashboardHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [headerSearch, setHeaderSearch] = useState("");
+  const router = useRouter();
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (headerSearch.trim()) {
+      router.push(`/tenders?q=${encodeURIComponent(headerSearch.trim())}`);
+    } else {
+      router.push("/tenders");
+    }
+  };
 
   return (
     <>
@@ -28,7 +40,7 @@ export default function DashboardHeader() {
         </div>
 
         {/* Global Search Bar - Neumorphic Debossed Field */}
-        <div className="hidden sm:flex items-center gap-4 flex-1 max-w-xl">
+        <form onSubmit={handleSearchSubmit} className="hidden sm:flex items-center gap-4 flex-1 max-w-xl">
           <div className="relative w-full">
             <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
               search
@@ -37,9 +49,11 @@ export default function DashboardHeader() {
               className="w-full pl-10 pr-4 py-2 neu-pressed rounded-xl text-xs sm:text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-1 focus:ring-secondary/40 transition-all"
               placeholder="Search tenders, NITs, docs (⌘K)..."
               type="text"
+              value={headerSearch}
+              onChange={(e) => setHeaderSearch(e.target.value)}
             />
           </div>
-        </div>
+        </form>
 
         {/* Header Right Cluster */}
         <div className="flex items-center gap-3 sm:gap-4">

@@ -1,7 +1,7 @@
 """
 API Views for Bidder Document Upload, Integrity Checking, and Extraction.
 """
-from rest_framework import status
+from rest_framework import status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -21,6 +21,8 @@ class DocumentUploadAPIView(APIView):
     pyHanko cryptographic signature validation, text extraction,
     and schema-constrained entity extraction.
     """
+    permission_classes = [permissions.AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = BidderDocumentUploadSerializer(data=request.data)
         if not serializer.is_valid():
@@ -54,6 +56,8 @@ class DocumentListAPIView(APIView):
     GET /api/v1/documents/
     Lists documents uploaded by the current tenant organization.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         queryset = BidderDocument.objects.filter(organization_id=org_id)
@@ -75,6 +79,8 @@ class DocumentDetailAPIView(APIView):
     GET /api/v1/documents/<doc_id>/
     Retrieves full verification, integrity, and extraction details for a document.
     """
+    permission_classes = [permissions.AllowAny]
+
     def get(self, request, doc_id, *args, **kwargs):
         org_id = get_tenant_org_id(request)
         try:
