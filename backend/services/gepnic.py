@@ -34,11 +34,45 @@ class GePNICAdapter:
     SUPPORTED_DOMAINS = [
         "eprocure.gov.in",
         "etenders.gov.in",
-        "mahatenders.gov.in",
-        "wbtenders.gov.in",
-        "kppp.karnataka.gov.in",
-        "tenders.up.gov.in",
         "defproc.gov.in",
+        # 28 States
+        "tender.apeprocurement.gov.in",
+        "arunachaltenders.gov.in",
+        "assamtenders.gov.in",
+        "eproc2.bihar.gov.in",
+        "eproc.bihar.gov.in",
+        "eproc.cgstate.gov.in",
+        "eprocure.goa.gov.in",
+        "tender.nprocure.com",
+        "etenders.hry.nic.in",
+        "hptenders.gov.in",
+        "jharkhandtenders.gov.in",
+        "kppp.karnataka.gov.in",
+        "etenders.kerala.gov.in",
+        "mptenders.gov.in",
+        "mahatenders.gov.in",
+        "manipurtenders.gov.in",
+        "meghalayatenders.gov.in",
+        "mizoramtenders.gov.in",
+        "nagalandtenders.gov.in",
+        "tendersodisha.gov.in",
+        "eproc.punjab.gov.in",
+        "eproc.rajasthan.gov.in",
+        "sikkimtender.gov.in",
+        "tntenders.gov.in",
+        "tender.telangana.gov.in",
+        "tripuratenders.gov.in",
+        "etender.up.nic.in",
+        "tenders.up.gov.in",
+        "uktenders.gov.in",
+        "wbtenders.gov.in",
+        # 8 Union Territories
+        "eprocure.andaman.gov.in",
+        "etenders.chd.nic.in",
+        "ddtenders.gov.in",
+        "govtprocurement.delhi.gov.in",
+        "jktenders.gov.in",
+        "pudutenders.gov.in",
     ]
 
     def __init__(
@@ -51,14 +85,17 @@ class GePNICAdapter:
 
     def can_handle(self, identifier_or_url: str) -> bool:
         """
-        Check if the identifier or URL belongs to a GePNIC portal or CPPP format.
+        Check if the identifier or URL belongs to a GePNIC portal, state eProcurement portal, or CPPP format.
         """
         clean = identifier_or_url.lower()
         for domain in self.SUPPORTED_DOMAINS:
             if domain in clean:
                 return True
+        # Match any official Indian Government procurement portal pattern (*tenders.gov.in, *etender*.nic.in, *eproc*.gov.in)
+        if re.search(r"\b[a-z0-9\-_.]+(?:tenders?|eproc[a-z0-9]*|etenders?)\.(?:gov\.in|nic\.in)\b", clean):
+            return True
         # Match common CPPP tender patterns like 2026_RAIL_12345 or CPPP/2026/...
-        if re.match(r"^\d{4}_[A-Z]{2,6}_\d+", identifier_or_url, re.IGNORECASE):
+        if re.match(r"^\d{4}_[A-Za-z0-9_]{2,12}_\d+", identifier_or_url, re.IGNORECASE):
             return True
         if clean.startswith("cppp"):
             return True

@@ -260,3 +260,43 @@ class TenderDetailAPIView(APIView):
             status=status.HTTP_404_NOT_FOUND,
         )
 
+
+class TenderPortalsAPIView(APIView):
+    """
+    GET /api/v1/tenders/portals/
+    Returns complete directory of all 36 Indian State and Union Territory e-Procurement portals,
+    plus central platforms (GeM, CPPP, IREPS, Infralens).
+    Supports ?type=State|Union Territory|Central and ?q=<search_text>.
+    """
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        from backend.services.live_search import STATE_PORTAL_REGISTRY
+
+        portal_type = request.query_params.get("type")
+        q = (request.query_params.get("q") or "").strip().lower()
+
+        portals = list(STATE_PORTAL_REGISTRY)
+
+        if portal_type:
+            portals = [p for p in portals if p.get("type", "").lower() == portal_type.lower()]
+
+        if q:
+            portals = [
+                p for p in portals
+                if q in p["name"].lower()
+                or q in p["domain"].lower()
+                or q in p["code"].lower()
+                or q in p["portal_name"].lower()
+            ]
+
+        return Response(
+            {
+                "success": True,
+                "total": len(portals),
+                "portals": portals,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+

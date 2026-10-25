@@ -10,6 +10,7 @@ from apps.tenders.views import (
     TenderIntakeAPIView,
     TenderListAPIView,
     TenderPDFUploadAPIView,
+    TenderPortalsAPIView,
     TenderSchemaAPIView,
     TenderSearchAPIView,
 )
@@ -19,6 +20,7 @@ app_name = "tenders"
 urlpatterns = [
     re_path(r"^$", TenderListAPIView.as_view(), name="tender-list"),
     re_path(r"^schema/?$", TenderSchemaAPIView.as_view(), name="tender-schema"),
+    re_path(r"^portals/?$", TenderPortalsAPIView.as_view(), name="tender-portals"),
     re_path(r"^search/?$", TenderSearchAPIView.as_view(), name="tender-search"),
     re_path(r"^intake/?$", TenderIntakeAPIView.as_view(), name="tender-intake"),
     re_path(r"^upload-pdf/?$", TenderPDFUploadAPIView.as_view(), name="tender-upload-pdf"),

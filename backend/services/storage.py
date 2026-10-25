@@ -294,10 +294,32 @@ class TenderStorage:
             params.append(f"%{buyer_name}%")
 
         if query:
-            # Match query against external_id, tender_id, title, buyer_name, or location
-            clauses.append("(external_id LIKE ? OR tender_id LIKE ? OR title LIKE ? OR buyer_name LIKE ? OR location LIKE ?)")
-            kw = f"%{query}%"
-            params.extend([kw, kw, kw, kw, kw])
+            # Tokenize words in query and match root/stem variations (e.g. roadways -> roadway)
+            words = [w.strip() for w in query.split() if len(w.strip()) >= 2]
+            if words:
+                for w in words:
+                    stems = {w.lower()}
+                    if w.lower().endswith("ways"):
+                        stems.add(w.lower()[:-1])  # roadways -> roadway
+                    elif w.lower().endswith("ies") and len(w) > 4:
+                        stems.add(w.lower()[:-3] + "y")
+                    elif w.lower().endswith("es") and len(w) > 4:
+                        stems.add(w.lower()[:-2])
+                    elif w.lower().endswith("s") and len(w) > 3:
+                        stems.add(w.lower()[:-1])  # roads -> road, bridges -> bridge
+
+                    sub_clauses = []
+                    sub_params = []
+                    for s in stems:
+                        kw = f"%{s}%"
+                        sub_clauses.append("(external_id LIKE ? OR tender_id LIKE ? OR title LIKE ? OR buyer_name LIKE ? OR location LIKE ?)")
+                        sub_params.extend([kw, kw, kw, kw, kw])
+                    clauses.append("(" + " OR ".join(sub_clauses) + ")")
+                    params.extend(sub_params)
+            else:
+                clauses.append("(external_id LIKE ? OR tender_id LIKE ? OR title LIKE ? OR buyer_name LIKE ? OR location LIKE ?)")
+                kw = f"%{query}%"
+                params.extend([kw, kw, kw, kw, kw])
 
         where_sql = " AND ".join(clauses)
         sql = f"""

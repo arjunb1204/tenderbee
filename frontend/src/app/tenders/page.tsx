@@ -5,7 +5,16 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { searchTenders, getTenderDetail, uploadTenderPdf, intakeTender, TenderItem } from "@/lib/api";
+import {
+  searchTenders,
+  getTenderDetail,
+  uploadTenderPdf,
+  intakeTender,
+  getPortals,
+  ALL_STATE_PORTALS,
+  PortalRegistryItem,
+  TenderItem,
+} from "@/lib/api";
 import { formatINR } from "@/lib/utils";
 
 function TendersListInner() {
@@ -18,6 +27,12 @@ function TendersListInner() {
   const [selectedPortal, setSelectedPortal] = useState<string>("All");
   const [searchQuery, setSearchQuery] = useState<string>(initialQuery);
   const [isSearching, startTransition] = useTransition();
+
+  // State Portals Directory modal state
+  const [isPortalsModalOpen, setIsPortalsModalOpen] = useState<boolean>(false);
+  const [portalsList, setPortalsList] = useState<PortalRegistryItem[]>(ALL_STATE_PORTALS);
+  const [portalFilterType, setPortalFilterType] = useState<string>("All");
+  const [portalSearchText, setPortalSearchText] = useState<string>("");
 
   // Selected tender for deep inspection modal
   const [inspectTender, setInspectTender] = useState<TenderItem | null>(null);
@@ -67,6 +82,29 @@ function TendersListInner() {
       loadTenders();
     }
   }, [initialQuery]);
+
+  // Load official portal directory from backend on mount
+  useEffect(() => {
+    getPortals().then((res) => {
+      if (res.success && Array.isArray(res.portals) && res.portals.length > 0) {
+        setPortalsList(res.portals);
+      }
+    });
+  }, []);
+
+  const displayedPortals = portalsList.filter((p) => {
+    if (portalFilterType !== "All" && p.type !== portalFilterType) return false;
+    if (portalSearchText.trim()) {
+      const q = portalSearchText.toLowerCase();
+      return (
+        p.name.toLowerCase().includes(q) ||
+        p.domain.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q) ||
+        p.portal_name.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
 
   // Handle live search (with automatic URL detection)
   const handleSearch = (e: React.FormEvent) => {
@@ -207,11 +245,18 @@ function TendersListInner() {
                   Open Tenders Radar
                 </h1>
                 <p className="text-sm text-on-surface-variant mt-0.5">
-                  Live indexed discovery across GeM, CPPP, IREPS &amp; 28 State Procurement portals.
+                  Live indexed discovery across GeM, CPPP, IREPS &amp; 36 Indian State &amp; UT portals.
                 </p>
               </div>
 
               <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsPortalsModalOpen(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-primary text-xs font-bold neu-button hover:bg-surface-container-highest transition-all cursor-pointer"
+                >
+                  <span className="material-symbols-outlined text-base text-primary">public</span>
+                  <span>State Portals ({portalsList.length})</span>
+                </button>
                 <button
                   onClick={() => {
                     setScraperError(null);
@@ -765,6 +810,31 @@ function TendersListInner() {
               </button>
             </div>
 
+            {/* State & UT Portal Quick Selector */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider flex items-center justify-between">
+                <span>Select from 36 State &amp; UT E-Procurement Portals:</span>
+                <span className="text-primary font-semibold">Automatic URL lookup</span>
+              </label>
+              <select
+                disabled={isScraping}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setScraperInput(e.target.value);
+                  }
+                }}
+                defaultValue=""
+                className="w-full px-3 py-2 rounded-xl neu-pressed text-xs bg-surface text-on-surface focus:outline-none focus:ring-1 focus:ring-primary/40 font-medium cursor-pointer"
+              >
+                <option value="" disabled>-- Select Indian State / UT Portal ({portalsList.length} Portals Available) --</option>
+                {portalsList.map((p) => (
+                  <option key={p.code + p.name} value={p.url}>
+                    {p.name} ({p.code}) — {p.domain} [{p.engine}]
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Quick-Fill Presets */}
             <div className="flex flex-col gap-1.5">
               <span className="text-[10px] uppercase font-bold text-on-surface-variant tracking-wider">
@@ -772,9 +842,10 @@ function TendersListInner() {
               </span>
               <div className="flex items-center gap-2 flex-wrap">
                 {[
-                  { label: "GeM Bid", val: "GEM/2026/B/894210" },
-                  { label: "Infralens URL", val: "https://tenders.infralens.in/tender/GEM-2026-B-894210" },
+                  { label: "Jharkhand", val: "https://jharkhandtenders.gov.in" },
                   { label: "Bihar eProc2", val: "BIH/EPROC2/141349" },
+                  { label: "Maharashtra", val: "https://mahatenders.gov.in" },
+                  { label: "GeM Bid", val: "GEM/2026/B/894210" },
                   { label: "Haryana CPPP", val: "2026_HRY_530295_1" },
                 ].map((preset) => (
                   <button
@@ -999,6 +1070,147 @@ function TendersListInner() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* STATE PORTALS DIRECTORY & LOOKUP MODAL */}
+      {/* ========================================================================= */}
+      {isPortalsModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-surface-container-lowest neu-flat rounded-3xl w-full max-w-4xl p-6 sm:p-8 flex flex-col gap-5 shadow-2xl max-h-[90vh]">
+            <div className="flex items-start justify-between border-b border-gray-200/80 pb-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="material-symbols-outlined text-primary text-xl">account_balance</span>
+                  <span className="text-[10px] uppercase font-bold text-primary tracking-wider">
+                    All-India Procurement Registry
+                  </span>
+                </div>
+                <h2 className="font-serif text-2xl font-bold text-primary">
+                  State &amp; National Procurement Portals ({displayedPortals.length})
+                </h2>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  Official e-Procurement portals covering all 28 Indian States, 8 Union Territories, and Central Marketplaces.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsPortalsModalOpen(false)}
+                className="w-8 h-8 rounded-full neu-button flex items-center justify-center text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-xl">close</span>
+              </button>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+              <div className="relative flex-1 w-full">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-base">
+                  search
+                </span>
+                <input
+                  type="text"
+                  value={portalSearchText}
+                  onChange={(e) => setPortalSearchText(e.target.value)}
+                  placeholder="Filter by state (e.g. Jharkhand, Maharashtra), code, or domain..."
+                  className="w-full pl-9 pr-4 py-2 neu-pressed rounded-xl text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-1 focus:ring-primary/40 font-medium"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto shrink-0">
+                {["All", "State", "Union Territory", "Central"].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setPortalFilterType(t)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium cursor-pointer transition-all shrink-0 ${
+                      portalFilterType === t
+                        ? "bg-primary text-white font-bold shadow-sm"
+                        : "neu-button text-on-surface-variant hover:text-on-surface"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Portals Grid */}
+            <div className="overflow-y-auto max-h-[55vh] pr-1 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {displayedPortals.map((p) => (
+                <div
+                  key={p.code + p.name}
+                  className="p-3.5 rounded-2xl bg-surface neu-flat-sm flex flex-col justify-between gap-2.5 border border-transparent hover:border-primary/20 transition-all"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif font-bold text-sm text-primary">{p.name}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-bold">
+                          {p.code}
+                        </span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                          p.type === "State" ? "bg-emerald-50 text-emerald-700" :
+                          p.type === "Union Territory" ? "bg-blue-50 text-blue-700" :
+                          "bg-purple-50 text-purple-700"
+                        }`}>
+                          {p.type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-on-surface font-medium mt-0.5">{p.portal_name}</p>
+                      <span className="text-[10px] text-on-surface-variant font-mono">{p.domain}</span>
+                    </div>
+
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open official portal website"
+                      className="p-1.5 rounded-lg neu-button text-on-surface-variant hover:text-primary shrink-0"
+                    >
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                    </a>
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                    <button
+                      onClick={() => {
+                        setIsPortalsModalOpen(false);
+                        setSearchQuery(p.name);
+                        loadTenders(p.name);
+                      }}
+                      className="flex-1 py-1 px-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest text-primary text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">search</span>
+                      <span>Lookup Tenders</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsPortalsModalOpen(false);
+                        setScraperInput(p.url);
+                        setScraperError(null);
+                        setScraperSuccessData(null);
+                        setIsScraperModalOpen(true);
+                      }}
+                      className="flex-1 py-1 px-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-[11px] font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
+                    >
+                      <span className="material-symbols-outlined text-xs">satellite_alt</span>
+                      <span>Scrape Portal</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 border-t border-gray-200/80 bg-surface-container-low rounded-2xl flex items-center justify-between text-xs text-on-surface-variant">
+              <span>Showing {displayedPortals.length} of {portalsList.length} verified government portals</span>
+              <button
+                onClick={() => setIsPortalsModalOpen(false)}
+                className="px-4 py-1.5 rounded-full neu-button text-xs font-bold text-on-surface-variant hover:text-on-surface cursor-pointer"
+              >
+                Close Directory
+              </button>
+            </div>
           </div>
         </div>
       )}

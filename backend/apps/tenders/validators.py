@@ -10,14 +10,22 @@ from urllib.parse import urlparse
 
 # Allow-listed domains for Indian procurement portals
 ALLOWLISTED_DOMAINS = [
-    "tenders.infralens.in",
-    "infralens.in",
+    "gov.in",
+    "nic.in",
     "gem.gov.in",
     "eprocure.gov.in",
-    "defproc.gov.in",
     "etenders.gov.in",
+    "defproc.gov.in",
     "ireps.gov.in",
     "www.ireps.gov.in",
+    "eproc2.bihar.gov.in",
+    "jharkhandtenders.gov.in",
+    "mahatenders.gov.in",
+    "etender.up.nic.in",
+    "kppp.karnataka.gov.in",
+    "tender.nprocure.com",
+    "infralens.in",
+    "tenders.infralens.in",
 ]
 
 # Standard Indian Government Tender ID Patterns
@@ -93,7 +101,7 @@ def validate_url(url: str, allow_custom_domains: bool = False) -> ValidationResu
                 False, "URL", url,
                 error_message=(
                     f"Domain '{hostname}' is not in the allow-list. "
-                    f"Permitted sources: {', '.join(ALLOWLISTED_DOMAINS[:4])}"
+                    "Permitted sources: Indian Government e-Procurement portals (.gov.in, .nic.in, nprocure.com, infralens.in)"
                 )
             )
 

@@ -135,3 +135,29 @@ class TenderAPITests(APITestCase):
         resp = self.client.get(f"/api/v1/tenders/{self.tender.id}/")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data["title"], "Procurement of Heavy Engineering Equipment")
+
+    def test_portals_directory_api(self):
+        resp = self.client.get("/api/v1/tenders/portals/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp.data["success"])
+        self.assertGreaterEqual(resp.data["total"], 36)
+
+        # Test filter by query
+        resp_jh = self.client.get("/api/v1/tenders/portals/?q=jharkhand")
+        self.assertEqual(resp_jh.status_code, 200)
+        self.assertEqual(resp_jh.data["total"], 1)
+        self.assertEqual(resp_jh.data["portals"][0]["code"], "JH")
+        self.assertEqual(resp_jh.data["portals"][0]["domain"], "jharkhandtenders.gov.in")
+
+    def test_state_procurement_allowlist_validators(self):
+        assert validate_url("https://jharkhandtenders.gov.in/nicgep/app?id=123").is_valid is True
+        assert validate_url("https://eproc2.bihar.gov.in/EPSV2Web/tender?id=141349").is_valid is True
+        assert validate_url("https://mahatenders.gov.in/app?page=view&id=441209").is_valid is True
+        assert validate_url("https://tender.nprocure.com/tender/999").is_valid is True
+
+    def test_query_parser_jharkhand_typo_and_roadways(self):
+        from backend.apps.tenders.search import QueryParser
+        parsed = QueryParser.parse("jharkand roadways tender")
+        self.assertEqual(parsed.state, "Jharkhand")
+        self.assertEqual(parsed.query, "roadways")
+

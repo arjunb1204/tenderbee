@@ -68,25 +68,92 @@ UI_NOISE_KEYWORDS = [
 ]
 
 STATE_PORTAL_DOMAINS = {
-    "Bihar": "eproc2.bihar.gov.in",
-    "Haryana": "etenders.hry.nic.in",
-    "Rajasthan": "eproc.rajasthan.gov.in",
-    "Uttar Pradesh": "etender.up.nic.in",
-    "Madhya Pradesh": "mptenders.gov.in",
-    "Punjab": "eproc.punjab.gov.in",
-    "Delhi": "govtprocurement.delhi.gov.in",
-    "Maharashtra": "mahatenders.gov.in",
-    "Odisha": "tendersodisha.gov.in",
-    "Kerala": "etenders.kerala.gov.in",
-    "Tamil Nadu": "tntenders.gov.in",
-    "West Bengal": "wbtenders.gov.in",
+    # 28 States
+    "Andhra Pradesh": "tender.apeprocurement.gov.in",
+    "Arunachal Pradesh": "arunachaltenders.gov.in",
     "Assam": "assamtenders.gov.in",
-    "Jharkhand": "jharkhandtenders.gov.in",
-    "Himachal Pradesh": "hptenders.gov.in",
-    "Uttarakhand": "uktenders.gov.in",
+    "Bihar": "eproc2.bihar.gov.in",
+    "Chhattisgarh": "eproc.cgstate.gov.in",
     "Goa": "eprocure.goa.gov.in",
+    "Gujarat": "tender.nprocure.com",
+    "Haryana": "etenders.hry.nic.in",
+    "Himachal Pradesh": "hptenders.gov.in",
+    "Jharkhand": "jharkhandtenders.gov.in",
+    "Karnataka": "kppp.karnataka.gov.in",
+    "Kerala": "etenders.kerala.gov.in",
+    "Madhya Pradesh": "mptenders.gov.in",
+    "Maharashtra": "mahatenders.gov.in",
+    "Manipur": "manipurtenders.gov.in",
+    "Meghalaya": "meghalayatenders.gov.in",
+    "Mizoram": "mizoramtenders.gov.in",
+    "Nagaland": "nagalandtenders.gov.in",
+    "Odisha": "tendersodisha.gov.in",
+    "Punjab": "eproc.punjab.gov.in",
+    "Rajasthan": "eproc.rajasthan.gov.in",
     "Sikkim": "sikkimtender.gov.in",
+    "Tamil Nadu": "tntenders.gov.in",
+    "Telangana": "tender.telangana.gov.in",
+    "Tripura": "tripuratenders.gov.in",
+    "Uttar Pradesh": "etender.up.nic.in",
+    "Uttarakhand": "uktenders.gov.in",
+    "West Bengal": "wbtenders.gov.in",
+    # 8 Union Territories
+    "Andaman and Nicobar Islands": "eprocure.andaman.gov.in",
+    "Chandigarh": "etenders.chd.nic.in",
+    "Dadra and Nagar Haveli and Daman and Diu": "ddtenders.gov.in",
+    "Delhi": "govtprocurement.delhi.gov.in",
+    "Jammu and Kashmir": "jktenders.gov.in",
+    "Ladakh": "eprocure.gov.in",
+    "Lakshadweep": "eprocure.gov.in",
+    "Puducherry": "pudutenders.gov.in",
 }
+
+STATE_PORTAL_REGISTRY: List[Dict[str, Any]] = [
+    # 28 States
+    {"name": "Andhra Pradesh", "code": "AP", "type": "State", "portal_name": "Andhra Pradesh eProcurement Portal", "domain": "tender.apeprocurement.gov.in", "url": "https://tender.apeprocurement.gov.in", "engine": "e-Procure"},
+    {"name": "Arunachal Pradesh", "code": "AR", "type": "State", "portal_name": "Arunachal Pradesh e-Procurement Portal", "domain": "arunachaltenders.gov.in", "url": "https://arunachaltenders.gov.in", "engine": "GePNIC"},
+    {"name": "Assam", "code": "AS", "type": "State", "portal_name": "Assam Tenders e-Procurement System", "domain": "assamtenders.gov.in", "url": "https://assamtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Bihar", "code": "BR", "type": "State", "portal_name": "Bihar eProc2 Portal", "domain": "eproc2.bihar.gov.in", "url": "https://eproc2.bihar.gov.in", "engine": "NextGen eProc"},
+    {"name": "Chhattisgarh", "code": "CG", "type": "State", "portal_name": "Chhattisgarh e-Procurement System", "domain": "eproc.cgstate.gov.in", "url": "https://eproc.cgstate.gov.in", "engine": "e-Procure"},
+    {"name": "Goa", "code": "GA", "type": "State", "portal_name": "Goa e-Procurement Portal", "domain": "eprocure.goa.gov.in", "url": "https://eprocure.goa.gov.in", "engine": "GePNIC"},
+    {"name": "Gujarat", "code": "GJ", "type": "State", "portal_name": "Gujarat nProcure e-Tendering", "domain": "tender.nprocure.com", "url": "https://tender.nprocure.com", "engine": "nProcure"},
+    {"name": "Haryana", "code": "HR", "type": "State", "portal_name": "Haryana e-Procurement Portal", "domain": "etenders.hry.nic.in", "url": "https://etenders.hry.nic.in", "engine": "GePNIC"},
+    {"name": "Himachal Pradesh", "code": "HP", "type": "State", "portal_name": "Himachal Pradesh Tenders Portal", "domain": "hptenders.gov.in", "url": "https://hptenders.gov.in", "engine": "GePNIC"},
+    {"name": "Jharkhand", "code": "JH", "type": "State", "portal_name": "Jharkhand Tenders e-Procurement System", "domain": "jharkhandtenders.gov.in", "url": "https://jharkhandtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Karnataka", "code": "KA", "type": "State", "portal_name": "Karnataka Public Procurement Portal (KPPP)", "domain": "kppp.karnataka.gov.in", "url": "https://kppp.karnataka.gov.in", "engine": "KPPP"},
+    {"name": "Kerala", "code": "KL", "type": "State", "portal_name": "Kerala e-Tenders Portal", "domain": "etenders.kerala.gov.in", "url": "https://etenders.kerala.gov.in", "engine": "GePNIC"},
+    {"name": "Madhya Pradesh", "code": "MP", "type": "State", "portal_name": "MP Tenders Portal", "domain": "mptenders.gov.in", "url": "https://mptenders.gov.in", "engine": "GePNIC"},
+    {"name": "Maharashtra", "code": "MH", "type": "State", "portal_name": "MahaTenders (Maharashtra e-Procurement)", "domain": "mahatenders.gov.in", "url": "https://mahatenders.gov.in", "engine": "GePNIC"},
+    {"name": "Manipur", "code": "MN", "type": "State", "portal_name": "Manipur e-Procurement Portal", "domain": "manipurtenders.gov.in", "url": "https://manipurtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Meghalaya", "code": "ML", "type": "State", "portal_name": "Meghalaya Tenders Portal", "domain": "meghalayatenders.gov.in", "url": "https://meghalayatenders.gov.in", "engine": "GePNIC"},
+    {"name": "Mizoram", "code": "MZ", "type": "State", "portal_name": "Mizoram e-Procurement System", "domain": "mizoramtenders.gov.in", "url": "https://mizoramtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Nagaland", "code": "NL", "type": "State", "portal_name": "Nagaland e-Procurement Portal", "domain": "nagalandtenders.gov.in", "url": "https://nagalandtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Odisha", "code": "OD", "type": "State", "portal_name": "Tenders Odisha Portal", "domain": "tendersodisha.gov.in", "url": "https://tendersodisha.gov.in", "engine": "GePNIC"},
+    {"name": "Punjab", "code": "PB", "type": "State", "portal_name": "Punjab e-Procurement Portal", "domain": "eproc.punjab.gov.in", "url": "https://eproc.punjab.gov.in", "engine": "GePNIC"},
+    {"name": "Rajasthan", "code": "RJ", "type": "State", "portal_name": "Rajasthan e-Procurement System", "domain": "eproc.rajasthan.gov.in", "url": "https://eproc.rajasthan.gov.in", "engine": "GePNIC"},
+    {"name": "Sikkim", "code": "SK", "type": "State", "portal_name": "Sikkim Tenders Portal", "domain": "sikkimtender.gov.in", "url": "https://sikkimtender.gov.in", "engine": "GePNIC"},
+    {"name": "Tamil Nadu", "code": "TN", "type": "State", "portal_name": "Tamil Nadu e-Tenders Portal", "domain": "tntenders.gov.in", "url": "https://tntenders.gov.in", "engine": "GePNIC"},
+    {"name": "Telangana", "code": "TS", "type": "State", "portal_name": "Telangana e-Procurement Portal", "domain": "tender.telangana.gov.in", "url": "https://tender.telangana.gov.in", "engine": "e-Procure"},
+    {"name": "Tripura", "code": "TR", "type": "State", "portal_name": "Tripura Tenders Portal", "domain": "tripuratenders.gov.in", "url": "https://tripuratenders.gov.in", "engine": "GePNIC"},
+    {"name": "Uttar Pradesh", "code": "UP", "type": "State", "portal_name": "e-Tender Uttar Pradesh", "domain": "etender.up.nic.in", "url": "https://etender.up.nic.in", "engine": "GePNIC"},
+    {"name": "Uttarakhand", "code": "UK", "type": "State", "portal_name": "Uttarakhand Tenders Portal", "domain": "uktenders.gov.in", "url": "https://uktenders.gov.in", "engine": "GePNIC"},
+    {"name": "West Bengal", "code": "WB", "type": "State", "portal_name": "West Bengal Tenders (WBTenders)", "domain": "wbtenders.gov.in", "url": "https://wbtenders.gov.in", "engine": "GePNIC"},
+    # 8 Union Territories
+    {"name": "Andaman and Nicobar Islands", "code": "AN", "type": "Union Territory", "portal_name": "Andaman & Nicobar eProcurement", "domain": "eprocure.andaman.gov.in", "url": "https://eprocure.andaman.gov.in", "engine": "GePNIC"},
+    {"name": "Chandigarh", "code": "CH", "type": "Union Territory", "portal_name": "Chandigarh Administration eTenders", "domain": "etenders.chd.nic.in", "url": "https://etenders.chd.nic.in", "engine": "GePNIC"},
+    {"name": "Dadra and Nagar Haveli and Daman and Diu", "code": "DD", "type": "Union Territory", "portal_name": "Daman & Diu / DNH e-Tenders", "domain": "ddtenders.gov.in", "url": "https://ddtenders.gov.in", "engine": "GePNIC"},
+    {"name": "Delhi", "code": "DL", "type": "Union Territory", "portal_name": "Delhi Govt e-Procurement System", "domain": "govtprocurement.delhi.gov.in", "url": "https://govtprocurement.delhi.gov.in", "engine": "GePNIC"},
+    {"name": "Jammu and Kashmir", "code": "JK", "type": "Union Territory", "portal_name": "JK Tenders Portal", "domain": "jktenders.gov.in", "url": "https://jktenders.gov.in", "engine": "GePNIC"},
+    {"name": "Ladakh", "code": "LA", "type": "Union Territory", "portal_name": "Ladakh Procurement Portal (CPPP)", "domain": "eprocure.gov.in", "url": "https://eprocure.gov.in", "engine": "GePNIC"},
+    {"name": "Lakshadweep", "code": "LD", "type": "Union Territory", "portal_name": "Lakshadweep Procurement (CPPP)", "domain": "eprocure.gov.in", "url": "https://eprocure.gov.in", "engine": "GePNIC"},
+    {"name": "Puducherry", "code": "PY", "type": "Union Territory", "portal_name": "Puducherry e-Tenders Portal", "domain": "pudutenders.gov.in", "url": "https://pudutenders.gov.in", "engine": "GePNIC"},
+    # Central / National
+    {"name": "Central Government (CPPP)", "code": "CENTRAL", "type": "Central", "portal_name": "Central Public Procurement Portal", "domain": "eprocure.gov.in", "url": "https://eprocure.gov.in", "engine": "GePNIC"},
+    {"name": "GeM", "code": "GEM", "type": "Central", "portal_name": "Government e-Marketplace", "domain": "gem.gov.in", "url": "https://gem.gov.in", "engine": "GeM"},
+    {"name": "Indian Railways (IREPS)", "code": "RAIL", "type": "Central", "portal_name": "Indian Railways E-Procurement System", "domain": "ireps.gov.in", "url": "https://ireps.gov.in", "engine": "IREPS"},
+    {"name": "Defence Procurement", "code": "DEF", "type": "Central", "portal_name": "Defence e-Procurement Portal", "domain": "defproc.gov.in", "url": "https://defproc.gov.in", "engine": "GePNIC"},
+    {"name": "Infralens", "code": "INFRA", "type": "Aggregator", "portal_name": "Infralens Tender Mirror", "domain": "tenders.infralens.in", "url": "https://tenders.infralens.in", "engine": "Mirror"},
+]
 
 BROWSER_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -894,48 +961,36 @@ class LiveTenderSearchEngine:
         if not search_query_str:
             search_query_str = "active government tenders"
 
-        # Construct high-precision queries that locate direct tender notice pages
+        # Construct high-precision targeted queries (max 2) to prevent downstream proxy timeout
         queries_to_try = []
-        if query and state:
-            queries_to_try.extend([
-                f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument 2026'.strip(),
-                f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument'.strip(),
-                f'"{query} Department" "{state}" site:bidplus.gem.gov.in/showbidDocument'.strip(),
-                f'2026 active tenders FrontEndViewTender {state} {query}'.strip(),
-                f'"{query}" {state} active tender notice site:gov.in 2026'.strip(),
-            ])
-        if state:
-            portal = STATE_PORTAL_DOMAINS.get(state)
-            if portal:
-                queries_to_try.extend([
-                    f"2026 active tenders FrontEndViewTender site:{portal} {category or ''}".strip(),
-                    f"2026 active tenders FrontEndViewTender site:{portal}".strip(),
-                ])
-            queries_to_try.extend([
-                f'"{state}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026'.strip(),
-                f"2026 active tenders FrontEndViewTender {state} {category or ''}".strip(),
-                f"{state} active tenders FrontEndViewTender site:nic.in".strip(),
-                f"{state} 2026 active tender notice site:gov.in".strip(),
-            ])
-        if query:
-            queries_to_try.extend([
-                f'"{query}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026'.strip(),
-                f"2026 active tenders FrontEndViewTender {query}".strip(),
-                f"{query} active tenders FrontEndViewTender site:nic.in".strip(),
-                f"{query} 2026 active tender notice site:gov.in".strip(),
-            ])
-        if not queries_to_try:
-            queries_to_try = [
-                f'"{search_query_str}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026'.strip(),
-                f"2026 active tenders FrontEndViewTender {search_query_str}".strip(),
-                f"{search_query_str} active tenders FrontEndViewTender site:nic.in".strip(),
-                f"{search_query_str} 2026 active tender notice site:gov.in".strip(),
-            ]
+        portal = STATE_PORTAL_DOMAINS.get(state) if state else None
+
+        if query and state and portal:
+            queries_to_try.append(f'"{query}" site:{portal}')
+            queries_to_try.append(f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument 2026')
+        elif query and state:
+            queries_to_try.append(f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument 2026')
+            queries_to_try.append(f'"{query}" "{state}" active tenders site:gov.in 2026')
+        elif state and portal:
+            queries_to_try.append(f"active tenders FrontEndViewTender site:{portal} {category or ''}".strip())
+            queries_to_try.append(f'"{state}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
+        elif query:
+            queries_to_try.append(f'"{query}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
+            queries_to_try.append(f'"{query}" active tenders FrontEndViewTender site:gov.in')
+        else:
+            queries_to_try.append(f'"{search_query_str}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
+            queries_to_try.append(f"2026 active tenders FrontEndViewTender {search_query_str}")
 
         candidate_urls = []
         seen_candidate_urls = set()
+        search_start_time = time.time()
 
-        for q_try in queries_to_try:
+        for q_try in queries_to_try[:2]:
+            # Enforce strict 8-second time budget so Next.js proxy never hangs up (30s limit)
+            if time.time() - search_start_time > 8.0:
+                logger.info("Live search time budget (8s) reached; finishing discovery.")
+                break
+
             logger.info("Executing live TinyFish search: '%s'", q_try)
             try:
                 res = self.client.search.query(
@@ -950,7 +1005,8 @@ class LiveTenderSearchEngine:
                             if domain and not any(b in domain for b in BLOCKED_DOMAINS):
                                 seen_candidate_urls.add(u)
                                 candidate_urls.append(u)
-                    if len(candidate_urls) >= 25:
+                    if len(candidate_urls) >= 5:
+                        logger.info("Discovered %d candidate URLs; proceeding to inspection.", len(candidate_urls))
                         break
             except Exception as e:
                 logger.error("Live TinyFish search query failed for '%s': %s", q_try, e)

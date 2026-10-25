@@ -16,48 +16,109 @@ from backend.services.storage import TenderStorage
 logger = logging.getLogger(__name__)
 
 INDIAN_STATES = [
+    # 28 States
     "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
     "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
     "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
     "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
     "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-    "Delhi", "Jammu and Kashmir", "Ladakh"
+    # 8 Union Territories
+    "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
 ]
 
 STATE_ALIASES = {
+    # Uttar Pradesh
     "up": "Uttar Pradesh",
     "u.p.": "Uttar Pradesh",
+    # Rajasthan
     "rj": "Rajasthan",
     "raj": "Rajasthan",
     "rajasthan": "Rajasthan",
+    # Maharashtra
     "mh": "Maharashtra",
     "maha": "Maharashtra",
+    # West Bengal
     "wb": "West Bengal",
     "w.b.": "West Bengal",
+    "bengal": "West Bengal",
+    # Madhya Pradesh
     "mp": "Madhya Pradesh",
     "m.p.": "Madhya Pradesh",
+    # Andhra Pradesh
     "ap": "Andhra Pradesh",
     "a.p.": "Andhra Pradesh",
+    # Haryana
     "hr": "Haryana",
     "hry": "Haryana",
+    # Bihar
     "br": "Bihar",
     "bihar": "Bihar",
+    # Delhi NCR
     "dl": "Delhi",
     "ncr": "Delhi",
+    # Gujarat
     "gj": "Gujarat",
+    "guj": "Gujarat",
+    # Tamil Nadu
     "tn": "Tamil Nadu",
+    "tamilnadu": "Tamil Nadu",
+    # Karnataka
     "ka": "Karnataka",
+    "karnatka": "Karnataka",
+    # Kerala
     "kl": "Kerala",
+    # Telangana
     "ts": "Telangana",
     "tg": "Telangana",
+    # Punjab
     "pb": "Punjab",
+    # Odisha
     "od": "Odisha",
+    "orissa": "Odisha",
+    # Jharkhand (with phonetic aliases & typos)
     "jh": "Jharkhand",
+    "jharkand": "Jharkhand",
+    "jharkhnd": "Jharkhand",
+    "jharkhand": "Jharkhand",
+    # Chhattisgarh
+    "cg": "Chhattisgarh",
+    "chattisgarh": "Chhattisgarh",
+    "chhatisgarh": "Chhattisgarh",
+    # Uttarakhand
     "uk": "Uttarakhand",
     "ua": "Uttarakhand",
+    "uttaranchal": "Uttarakhand",
+    # Himachal Pradesh
+    "hp": "Himachal Pradesh",
+    "himachal": "Himachal Pradesh",
+    # Assam & Northeast
+    "as": "Assam",
+    "manipur": "Manipur",
+    "meghalaya": "Meghalaya",
+    "mizoram": "Mizoram",
+    "nagaland": "Nagaland",
+    "tripura": "Tripura",
+    "sikkim": "Sikkim",
+    # Union Territories
+    "jk": "Jammu and Kashmir",
+    "j&k": "Jammu and Kashmir",
+    "kashmir": "Jammu and Kashmir",
+    "ladakh": "Ladakh",
+    "chd": "Chandigarh",
+    "py": "Puducherry",
+    "pondicherry": "Puducherry",
+    "dnh": "Dadra and Nagar Haveli and Daman and Diu",
+    "daman": "Dadra and Nagar Haveli and Daman and Diu",
+    "diu": "Dadra and Nagar Haveli and Daman and Diu",
+    "andaman": "Andaman and Nicobar Islands",
+    "nicobar": "Andaman and Nicobar Islands",
 }
 
 CITY_TO_STATE = {
+    # Jharkhand
+    "ranchi": "Jharkhand", "jamshedpur": "Jharkhand", "dhanbad": "Jharkhand",
+    "bokaro": "Jharkhand", "deoghar": "Jharkhand", "hazaribagh": "Jharkhand",
     # Bihar
     "patna": "Bihar", "gaya": "Bihar", "bhagalpur": "Bihar", "muzaffarpur": "Bihar",
     "darbhanga": "Bihar", "purnia": "Bihar", "hajipur": "Bihar", "danapur": "Bihar",
@@ -82,6 +143,20 @@ CITY_TO_STATE = {
     "asansol": "West Bengal", "siliguri": "West Bengal",
     # Delhi NCR
     "delhi": "Delhi", "new delhi": "Delhi",
+    # Karnataka & South
+    "bengaluru": "Karnataka", "bangalore": "Karnataka", "mysuru": "Karnataka", "mangalore": "Karnataka",
+    "chennai": "Tamil Nadu", "coimbatore": "Tamil Nadu", "madurai": "Tamil Nadu",
+    "hyderabad": "Telangana", "warangal": "Telangana",
+    "thiruvananthapuram": "Kerala", "kochi": "Kerala", "kozhikode": "Kerala",
+    # Gujarat, MP, Odisha, Punjab, Chhattisgarh
+    "ahmedabad": "Gujarat", "surat": "Gujarat", "vadodara": "Gujarat",
+    "bhopal": "Madhya Pradesh", "indore": "Madhya Pradesh", "gwalior": "Madhya Pradesh",
+    "bhubaneswar": "Odisha", "cuttack": "Odisha", "rourkela": "Odisha",
+    "chandigarh": "Chandigarh", "ludhiana": "Punjab", "amritsar": "Punjab",
+    "raipur": "Chhattisgarh", "bilaspur": "Chhattisgarh",
+    "dehradun": "Uttarakhand", "shimla": "Himachal Pradesh",
+    "srinagar": "Jammu and Kashmir", "jammu": "Jammu and Kashmir",
+    "guwahati": "Assam",
 }
 
 CATEGORIES = ["Services", "Works", "Goods"]
@@ -253,11 +328,11 @@ class QueryParser:
 
     @classmethod
     def _extract_category(cls, text: str) -> Optional[str]:
-        if re.search(r"\b(service|services|housekeeping|sanitation|security|manpower|facility|it)\b", text):
+        if re.search(r"\b(service|services|housekeeping|sanitation|security|manpower|facility|it|consultancy|consulting)\b", text):
             return "Services"
-        if re.search(r"\b(work|works|civil|construction|road|bridge|building|pipeline|drainage|expressway|flyover)\b", text):
+        if re.search(r"\b(work|works|civil|construction|widening|pavement|bridge|bridges|building|buildings|pipeline|drainage|expressway|flyover)\b", text):
             return "Works"
-        if re.search(r"\b(good|goods|supply|supplies|equipment|hardware|vehicle|material|solar)\b", text):
+        if re.search(r"\b(good|goods|supply|supplies|equipment|hardware|vehicle|vehicles|material|materials|solar)\b", text):
             return "Goods"
         return None
 
@@ -348,7 +423,7 @@ class QueryParser:
             "period", "capital", "value", "budget", "find", "search", "between", "from", "upto",
             "having", "contract", "like", "any", "all", "around", "near", "location", "is", "these",
             "those", "there", "wanted", "want", "look", "looking", "procurement", "notice", "notices",
-            "number", "numbers", "rfq", "bid", "no"
+            "number", "numbers", "rfq", "bid", "no", "work", "works", "service", "services", "goods"
         ]
         if state:
             remove_terms.extend([state.lower(), f"in {state.lower()}"])
@@ -356,7 +431,10 @@ class QueryParser:
                 if full_state.lower() == state.lower():
                     remove_terms.extend([alias, f"in {alias}"])
         if category:
-            remove_terms.extend([category.lower(), f"{category.lower()}s"])
+            cat_low = category.lower()
+            remove_terms.extend([cat_low, f"{cat_low}s"])
+            if cat_low.endswith("s"):
+                remove_terms.append(cat_low[:-1])
         if city:
             remove_terms.extend([city.lower(), f"in {city.lower()}"])
 
