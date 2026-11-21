@@ -303,7 +303,7 @@ class LLMAdapter:
                 url,
                 headers={"x-goog-api-key": self.api_key},
                 json=payload,
-                timeout=httpx.Timeout(30.0, connect=5.0),
+                timeout=httpx.Timeout(6.0, connect=5.0),
             )
             if not response.is_success:
                 logger.error("Gemini API returned HTTP status %s.", response.status_code)
@@ -362,7 +362,7 @@ class LLMAdapter:
         if len(query_text) > 2_000:
             logger.warning("Skipping LLM search parsing for an oversized query.")
             return None
-        if not self.api_key:
+        if not self.api_key or not self.api_key.startswith("AIza"):
             return None
 
         system_instruction = (

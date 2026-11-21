@@ -1,33 +1,47 @@
 """
 API Views for Immutable Audit Trail.
+Append-only: List and Retrieve operations only. Modifying or deleting audit records is impossible.
 """
-from rest_framework import status, permissions
-from rest_framework.response import Response
-from rest_framework.views import APIView
-
-from apps.accounts.utils import get_tenant_org_id
+from rest_framework import generics
+from rest_framework.pagination import PageNumberPagination
+from apps.accounts.permissions import IsMember, TenantIsolationMixin
 from apps.audit.models import AuditLogEntry
 from apps.audit.serializers import AuditLogEntrySerializer
 
 
-class AuditLogListAPIView(APIView):
+class AuditPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+class AuditLogListAPIView(TenantIsolationMixin, generics.ListAPIView):
     """
     GET /api/v1/audit/
-    Retrieves immutable audit trail events for compliance verification,
-    rule-freezes, and document intakes.
+    Retrieves paginated immutable audit trail events for the authenticated organization.
     """
-    permission_classes = [permissions.AllowAny]
-    def get(self, request, *args, **kwargs):
-        org_id = get_tenant_org_id(request)
-        queryset = AuditLogEntry.objects.filter(organization_id=org_id)
+    queryset = AuditLogEntry.objects.all()
+    serializer_class = AuditLogEntrySerializer
+    permission_classes = [IsMember]
+    pagination_class = AuditPagination
 
-        target_id = request.query_params.get("target_id")
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        target_id = self.request.query_params.get("target_id")
         if target_id:
             queryset = queryset.filter(target_id=target_id)
-
-        event_type = request.query_params.get("event_type")
+        event_type = self.request.query_params.get("event_type")
         if event_type:
             queryset = queryset.filter(event_type=event_type)
+        return queryset
 
-        serializer = AuditLogEntrySerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class AuditLogDetailAPIView(TenantIsolationMixin, generics.RetrieveAPIView):
+    """
+    GET /api/v1/audit/<id>/
+    Retrieves a single immutable audit entry by ID with cross-tenant 404 protection.
+    """
+    serializer_class = AuditLogEntrySerializer
+    permission_classes = [IsMember]
+    queryset = AuditLogEntry.objects.all()
+    lookup_field = "id"

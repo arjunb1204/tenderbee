@@ -18,8 +18,11 @@ def test_b2_storage_initialization_defaults():
     assert storage.bucket_name == "test_bucket"
 
 
-def test_b2_storage_local_disk_fallback(tmp_path):
-    storage = BackblazeB2Storage()
+def test_b2_storage_local_disk_fallback(tmp_path, monkeypatch):
+    monkeypatch.delenv("B2_APPLICATION_KEY_ID", raising=False)
+    monkeypatch.delenv("B2_APPLICATION_KEY", raising=False)
+    monkeypatch.delenv("B2_ENDPOINT_URL", raising=False)
+    storage = BackblazeB2Storage(endpoint_url="", key_id="", application_key="")
     assert storage.is_configured is False
 
     test_content = b"%PDF-1.4 test bidder document content"

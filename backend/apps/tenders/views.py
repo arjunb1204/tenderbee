@@ -4,9 +4,11 @@ API Views for Tender Intake, PDF Parsing, and RulePack Management.
 import os
 import tempfile
 from pathlib import Path
-from rest_framework import status, permissions
+from rest_framework import status, permissions, generics
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from apps.accounts.permissions import IsMember, TenantIsolationMixin
 
 from backend.apps.tenders.services import TenderService
 from backend.apps.tenders.serializers import (
@@ -133,10 +135,25 @@ class TenderSearchAPIView(APIView):
         from backend.apps.tenders.search import TenderSearchService, TenderSearchFilter
 
         prompt = request.query_params.get("q") or request.query_params.get("prompt")
-        service = TenderSearchService()
-        if prompt:
-            res = service.search_by_prompt(prompt)
-            return Response(res, status=status.HTTP_200_OK)
+        raw_query = request.query_params.get("query")
+        effective_text = (prompt or raw_query or "").strip()
+
+        state_param = request.query_params.get("state")
+        if state_param and state_param.strip().lower() in ("all", "all states", "none", ""):
+            state_param = None
+        elif state_param:
+            state_param = state_param.strip()
+
+        city_param = request.query_params.get("city") or request.query_params.get("city_or_district")
+        category_param = request.query_params.get("category")
+        portal_param = request.query_params.get("portal")
+        if portal_param and portal_param.strip().lower() in ("all", "none", ""):
+            portal_param = None
+        elif portal_param:
+            portal_param = portal_param.strip()
+
+        nationwide_raw = (request.query_params.get("nationwide") or "false").strip().lower()
+        nationwide = nationwide_raw in ("true", "1", "yes")
 
         min_val = None
         if "min_value" in request.query_params:
@@ -166,15 +183,65 @@ class TenderSearchAPIView(APIView):
             or request.query_params.get("rfq_id")
         )
 
+        service = TenderSearchService()
+
+        # If natural language text is provided, parse it and overlay explicit structured filters
+        if effective_text:
+            parsed = service.parse_prompt_to_filters(effective_text)
+            # Explicit user-selected filters strictly override parsed values
+            if state_param:
+                parsed.state = state_param
+            if city_param:
+                parsed.city_or_district = city_param
+            if category_param:
+                parsed.category = category_param
+            if portal_param:
+                parsed.portal = portal_param
+            if min_val is not None:
+                parsed.min_value_inr = min_val
+            if max_val is not None:
+                parsed.max_value_inr = max_val
+            if tenure is not None:
+                parsed.min_tenure_months = tenure
+            if t_num:
+                parsed.tender_number = t_num
+            parsed.nationwide = nationwide
+
+            res = service.search(parsed, raw_prompt=effective_text)
+            res["interpreted_prompt"] = effective_text
+            return Response(res, status=status.HTTP_200_OK)
+
+        # Empty search protection: if no text query, no state, no portal, and no tender number, return empty result
+        if not state_param and not t_num and not category_param and not portal_param and not nationwide:
+            return Response({
+                "success": True,
+                "applied_filters": {
+                    "query": None,
+                    "state": None,
+                    "category": None,
+                    "portal": None,
+                    "nationwide": False,
+                },
+                "total_matches": 0,
+                "page": 1,
+                "limit": 20,
+                "source": "empty_criteria",
+                "results": [],
+                "message": "Please enter a search query or select a state to discover tenders.",
+            }, status=status.HTTP_200_OK)
+
         filters = TenderSearchFilter(
-            query=request.query_params.get("query"),
+            query=raw_query,
             tender_number=t_num,
-            state=request.query_params.get("state"),
-            category=request.query_params.get("category"),
+            state=state_param,
+            city_or_district=city_param,
+            category=category_param,
+            portal=portal_param,
             min_value_inr=min_val,
             max_value_inr=max_val,
             min_tenure_months=tenure,
             buyer_name=request.query_params.get("buyer"),
+            nationwide=nationwide,
         )
         res = service.search(filters)
         return Response(res, status=status.HTTP_200_OK)
@@ -183,9 +250,42 @@ class TenderSearchAPIView(APIView):
         from backend.apps.tenders.search import TenderSearchService, TenderSearchFilter
 
         prompt = request.data.get("prompt") or request.data.get("q")
+        raw_query = request.data.get("query")
+        effective_text = (prompt or raw_query or "").strip()
+
+        state_param = request.data.get("state")
+        if state_param and state_param.strip().lower() in ("all", "all states", "none", ""):
+            state_param = None
+        elif state_param:
+            state_param = state_param.strip()
+
+        portal_param = request.data.get("portal")
+        if portal_param and portal_param.strip().lower() in ("all", "none", ""):
+            portal_param = None
+        elif portal_param:
+            portal_param = portal_param.strip()
+
+        nationwide = bool(request.data.get("nationwide", False))
+
         service = TenderSearchService()
-        if prompt:
-            res = service.search_by_prompt(prompt)
+        if effective_text:
+            parsed = service.parse_prompt_to_filters(effective_text)
+            if state_param:
+                parsed.state = state_param
+            if portal_param:
+                parsed.portal = portal_param
+            if request.data.get("category"):
+                parsed.category = request.data.get("category")
+            if request.data.get("min_value_inr"):
+                parsed.min_value_inr = float(request.data["min_value_inr"])
+            if request.data.get("max_value_inr"):
+                parsed.max_value_inr = float(request.data["max_value_inr"])
+            if request.data.get("tender_number"):
+                parsed.tender_number = request.data["tender_number"]
+            parsed.nationwide = nationwide
+
+            res = service.search(parsed, raw_prompt=effective_text)
+            res["interpreted_prompt"] = effective_text
             return Response(res, status=status.HTTP_200_OK)
 
         try:
@@ -208,19 +308,21 @@ class TenderSchemaAPIView(APIView):
         return Response(TenderPDFExtractionResult.get_json_schema(), status=status.HTTP_200_OK)
 
 
-class TenderListAPIView(APIView):
+class TenderListAPIView(TenantIsolationMixin, generics.ListAPIView):
     """
     GET /api/v1/tenders/
-    Lists tenders belonging to the current tenant.
+    Lists tenders belonging strictly to the authenticated tenant organization.
     """
-    def get(self, request, *args, **kwargs):
-        from apps.accounts.utils import get_tenant_org_id
-        from apps.tenders.models import Tender
+    permission_classes = [IsMember]
+    pagination_class = PageNumberPagination
+
+    def get_serializer_class(self):
         from apps.tenders.serializers import TenderSerializer
-        org_id = get_tenant_org_id(request)
-        tenders = Tender.objects.filter(organization_id=org_id)
-        serializer = TenderSerializer(tenders, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return TenderSerializer
+
+    def get_queryset(self):
+        from apps.tenders.models import Tender
+        return Tender.objects.filter(organization=self.request.user.organization)
 
 
 class TenderDetailAPIView(APIView):

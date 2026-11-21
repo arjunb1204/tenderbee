@@ -48,8 +48,9 @@ class DocumentPipelineTests(APITestCase):
             "document_type": DocumentTypeEnum.UDYAM,
         }
         resp = self.client.post(url, data, format="multipart")
-        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(resp.status_code, status.HTTP_202_ACCEPTED)
         self.assertTrue(resp.data["success"])
+        self.assertIn("job_id", resp.data)
         doc_data = resp.data["document"]
         self.assertEqual(doc_data["file_name"], "udyam_cert_2026.pdf")
         self.assertEqual(doc_data["document_type"], "udyam_certificate")
@@ -60,7 +61,7 @@ class DocumentPipelineTests(APITestCase):
         self.assertEqual(doc.organization, self.org)
 
         # Check Audit event
-        audit = AuditLogEntry.objects.filter(target_id=doc.id, event_type=AuditEventType.DOCUMENT_UPLOADED).first()
+        audit = AuditLogEntry.objects.filter(target_id=doc.id, event_type=AuditEventType.DOCUMENT_UPLOAD).first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.details["file_name"], "udyam_cert_2026.pdf")
 
@@ -77,28 +78,30 @@ class DocumentPipelineTests(APITestCase):
 
         resp = self.client.get("/api/v1/documents/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(resp.data), 1)
+        results = resp.data.get("results", resp.data)
+        self.assertEqual(len(results), 1)
 
         detail_resp = self.client.get(f"/api/v1/documents/{doc.id}/")
         self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(detail_resp.data["file_name"], "ca_certificate.pdf")
         self.assertEqual(detail_resp.data["extracted_data"]["average_turnover_inr"]["value"], 50000000.0)
 
-    def test_cloudflare_r2_storage_adapter(self):
-        from backend.services.r2_storage import CloudflareR2Storage
-        r2 = CloudflareR2Storage()
-        sample_key = "test_artifacts/tender_sample_doc.pdf"
-        sample_bytes = b"%PDF-1.4 Mock document bytes for Cloudflare R2 test"
+    def test_unified_storage_adapter(self):
+        from services.storage import put, get, exists, delete
+        sample_key = f"orgs/{self.org.id}/documents/tender_sample_doc.pdf"
+        sample_bytes = b"%PDF-1.4 Mock document bytes for TenderBee test"
 
-        # Test Upload
-        result = r2.upload_bytes(key=sample_key, data=sample_bytes, content_type="application/pdf")
-        self.assertTrue(result["success"])
-        self.assertIn("key", result)
+        # Test Put
+        self.assertTrue(put(sample_key, sample_bytes, content_type="application/pdf"))
 
         # Test Exists
-        self.assertTrue(r2.file_exists(sample_key))
-        self.assertFalse(r2.file_exists("non_existent_key_99999.xyz"))
+        self.assertTrue(exists(sample_key))
+        self.assertFalse(exists("non_existent_key_99999.xyz"))
 
-        # Test Download
-        downloaded = r2.download_bytes(sample_key)
+        # Test Get
+        downloaded = get(sample_key)
         self.assertEqual(downloaded, sample_bytes)
+
+        # Test Delete
+        self.assertTrue(delete(sample_key))
+        self.assertFalse(exists(sample_key))

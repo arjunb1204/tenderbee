@@ -41,6 +41,7 @@ class VerificationAssessment(TenantAwareModel):
     missing_documents = models.JSONField(default=list, help_text="Documents required but not provided")
     fix_list = models.JSONField(default=list, help_text="Actionable fixes required before bidding")
     registry_verifications = models.JSONField(default=dict, help_text="Live checks against official registries via TinyFish")
+    verdict_overrides = models.JSONField(default=list, help_text="Human reviewer verdict overrides preserving original verdicts")
     assessed_by = models.CharField(max_length=255, default="deterministic_engine")
     assessed_at = models.DateTimeField(auto_now_add=True)
 

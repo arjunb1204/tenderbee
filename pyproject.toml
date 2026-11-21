@@ -1,0 +1,9 @@
+[tool.pyrefly]
+python-interpreter-path = "bee/Scripts/python.exe"
+search-path = [".", "backend"]
+
+[tool.pyright]
+include = ["backend"]
+extraPaths = [".", "backend"]
+venvPath = "."
+venv = "bee"

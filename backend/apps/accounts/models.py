@@ -29,9 +29,13 @@ class Organization(models.Model):
 
 
 class UserRole(models.TextChoices):
-    ADMIN = "admin", "Admin"
-    BID_MANAGER = "bid_manager", "Bid Manager"
-    VIEWER = "viewer", "Viewer"
+    OWNER = "owner", "Owner"
+    REVIEWER = "reviewer", "Reviewer"
+    MEMBER = "member", "Member"
+    # Backward compatibility aliases
+    ADMIN = "admin", "Admin (Legacy)"
+    BID_MANAGER = "bid_manager", "Bid Manager (Legacy)"
+    VIEWER = "viewer", "Viewer (Legacy)"
 
 
 class User(AbstractUser):
@@ -49,8 +53,10 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=32,
         choices=UserRole.choices,
-        default=UserRole.BID_MANAGER,
+        default=UserRole.MEMBER,
     )
+    failed_login_attempts = models.PositiveIntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -58,6 +64,35 @@ class User(AbstractUser):
     @property
     def organization_id(self):
         return self.organization.id if self.organization else None
+
+    @property
+    def is_owner(self):
+        return self.role in (UserRole.OWNER, UserRole.ADMIN)
+
+    @property
+    def is_reviewer_or_owner(self):
+        return self.role in (UserRole.OWNER, UserRole.REVIEWER, UserRole.ADMIN, UserRole.BID_MANAGER)
+
+    @property
+    def is_member(self):
+        return bool(self.organization_id)
+
+    def is_locked(self):
+        from django.utils import timezone
+        return bool(self.locked_until and self.locked_until > timezone.now())
+
+    def reset_lockout(self):
+        self.failed_login_attempts = 0
+        self.locked_until = None
+        self.save(update_fields=["failed_login_attempts", "locked_until"])
+
+    def record_failed_login(self, max_attempts=5, lockout_minutes=15):
+        from django.utils import timezone
+        from datetime import timedelta
+        self.failed_login_attempts += 1
+        if self.failed_login_attempts >= max_attempts:
+            self.locked_until = timezone.now() + timedelta(minutes=lockout_minutes)
+        self.save(update_fields=["failed_login_attempts", "locked_until"])
 
     def __str__(self):
         return f"{self.email} [{self.role}]"

@@ -7,16 +7,11 @@ from django.urls import include, path, re_path
 from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
+from drf_spectacular.views import SpectacularAPIView
+from apps.documents.views import JobDetailAPIView
 
 
-def health_check(request):
-    """Liveness and health check endpoint."""
-    return JsonResponse({
-        "status": "healthy",
-        "service": "TenderBee Core API",
-        "version": "1.0.0",
-        "tenant_id": getattr(request, "org_id", "org_default"),
-    })
+from apps.health import health_check
 
 
 def api_root(request):
@@ -53,8 +48,12 @@ urlpatterns = [
     path("api-auth/", include("rest_framework.urls")),
     path("api/health/", health_check, name="health-check"),
 
+    # OpenAPI Schema
+    path("api/schema/", SpectacularAPIView.as_view(), name="openapi-schema"),
+
     # API v1 routes
     re_path(r"^api/v1/auth/?", include("apps.accounts.urls")),
+    re_path(r"^api/v1/jobs/(?P<id>[^/]+)/?$", JobDetailAPIView.as_view(), name="async-job-detail"),
     re_path(r"^api/v1/tenders/?", include("apps.tenders.urls")),
     re_path(r"^api/v1/rules/?", include("apps.rules.urls")),
     re_path(r"^api/v1/documents/?", include("apps.documents.urls")),

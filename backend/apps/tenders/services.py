@@ -268,36 +268,37 @@ class TenderService:
             return RuleSource(page=1, quote=default)
 
         # 1. Statutory Document Rules (Udyam & CA Certificate)
-        if "udyam_registration" in mandatory_docs or eligibility.get("mse_exemption_applicable"):
-            rules.append(
-                Rule(
-                    rule_id="R-DOC-UDYAM",
-                    document_type=DocumentType.UDYAM_CERTIFICATE,
-                    rule_type=RuleType.DOCUMENT_REQUIRED,
-                    description="Valid Udyam Registration Certificate required for MSE eligibility / exemption.",
-                    source=find_quote("mse_exemption", "Udyam Registration Certificate required."),
-                    field="status",
-                    operator="eq",
-                    value="ACTIVE",
-                )
+        rules.append(
+            Rule(
+                rule_id="R-DOC-UDYAM",
+                document_type=DocumentType.UDYAM_CERTIFICATE,
+                rule_type=RuleType.DOCUMENT_REQUIRED,
+                description="Valid Udyam Registration Certificate required for MSE eligibility / exemption.",
+                source=find_quote("mse_exemption", "Udyam Registration Certificate required for MSE eligibility / exemption."),
+                field="status",
+                operator="eq",
+                value="ACTIVE",
             )
+        )
 
-        if "ca_turnover_certificate" in mandatory_docs or eligibility.get("min_annual_turnover_inr"):
-            rules.append(
-                Rule(
-                    rule_id="R-DOC-CA",
-                    document_type=DocumentType.CA_TURNOVER_CERTIFICATE,
-                    rule_type=RuleType.DOCUMENT_REQUIRED,
-                    description="Chartered Accountant certified turnover balance sheet required.",
-                    source=find_quote("turnover_requirement", "CA Turnover Certificate mandatory."),
-                    field="status",
-                    operator="eq",
-                    value="SUBMITTED",
-                )
+        rules.append(
+            Rule(
+                rule_id="R-DOC-CA",
+                document_type=DocumentType.CA_TURNOVER_CERTIFICATE,
+                rule_type=RuleType.DOCUMENT_REQUIRED,
+                description="Chartered Accountant certified turnover balance sheet required.",
+                source=find_quote("turnover_requirement", "CA Turnover Certificate mandatory."),
+                field="status",
+                operator="eq",
+                value="SUBMITTED",
             )
+        )
 
         # 2. Turnover Numeric Threshold Rule (T1)
         turnover_val = eligibility.get("min_annual_turnover_inr")
+        if not turnover_val and tender_data.get("estimated_value_inr"):
+            turnover_val = round(float(tender_data["estimated_value_inr"]) * 0.30, 2)
+
         if turnover_val:
             years = eligibility.get("turnover_years", 3)
             rules.append(
@@ -313,20 +314,33 @@ class TenderService:
                 )
             )
 
-        # 3. UDIN Mandatory Rule
-        if eligibility.get("udin_mandatory"):
-            rules.append(
-                Rule(
-                    rule_id="R-UDIN",
-                    document_type=DocumentType.CA_TURNOVER_CERTIFICATE,
-                    rule_type=RuleType.IDENTIFIER_PRESENT,
-                    description="Chartered Accountant Unique Document Identification Number (UDIN) is mandatory.",
-                    source=find_quote("udin_requirement", "UDIN must be mentioned on CA certificates."),
-                    field="udin",
-                    operator="present",
-                    value=True,
-                )
+        # 3. UDIN Mandatory Rule (ICAI compliance)
+        rules.append(
+            Rule(
+                rule_id="R-UDIN",
+                document_type=DocumentType.CA_TURNOVER_CERTIFICATE,
+                rule_type=RuleType.IDENTIFIER_PRESENT,
+                description="Chartered Accountant Unique Document Identification Number (UDIN) is mandatory.",
+                source=find_quote("udin_requirement", "UDIN must be mentioned on CA certificates."),
+                field="udin",
+                operator="present",
+                value=True,
             )
+        )
+
+        # 4. GST Registration Rule
+        rules.append(
+            Rule(
+                rule_id="R-DOC-GST",
+                document_type=DocumentType.GST_CERTIFICATE,
+                rule_type=RuleType.DOCUMENT_REQUIRED,
+                description="Valid Goods and Services Tax (GST) Registration Certificate required.",
+                source=find_quote("gst_certificate", "Valid GST registration certificate required."),
+                field="gstin",
+                operator="present",
+                value=True,
+            )
+        )
 
         # 4. Liquidity Numeric Threshold Rule (T2)
         liquidity_val = eligibility.get("min_liquidity_inr")

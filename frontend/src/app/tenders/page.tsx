@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useTransition, Suspense } from "react";
+import React, { useState, useEffect, useTransition, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Sidebar from "@/components/Sidebar";
@@ -14,17 +14,20 @@ import {
   ALL_STATE_PORTALS,
   PortalRegistryItem,
   TenderItem,
+  apiClient,
 } from "@/lib/api";
 import { formatINR } from "@/lib/utils";
 
 function TendersListInner() {
   const searchParams = useSearchParams();
-  const initialQuery = searchParams.get("q") || "";
+  const initialQuery = searchParams.get("query") || searchParams.get("q") || "";
+  const initialState = searchParams.get("state") || "All";
 
   const [tenders, setTenders] = useState<TenderItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedPortal, setSelectedPortal] = useState<string>("All");
+  const [selectedState, setSelectedState] = useState<string>(initialState);
   const [searchQuery, setSearchQuery] = useState<string>(initialQuery);
   const [isSearching, startTransition] = useTransition();
 
@@ -55,15 +58,27 @@ function TendersListInner() {
   const [scraperSuccessData, setScraperSuccessData] = useState<any | null>(null);
 
   // Fetch initial tenders on load
-  const loadTenders = async (q?: string) => {
+  const loadTenders = async (q?: string, state?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await searchTenders({ q, limit: 50 });
+      const activeState = state !== undefined ? state : selectedState;
+      const res = await searchTenders({
+        q: q !== undefined ? q : searchQuery,
+        state: activeState !== "All" ? activeState : undefined,
+        limit: 50,
+      });
       if (res.success && Array.isArray(res.results)) {
         setTenders(res.results);
       } else {
-        setTenders([]);
+        // Fallback to apiClient.tenders.list()
+        try {
+          const apiRes = await apiClient.tenders.list();
+          const items = Array.isArray(apiRes) ? apiRes : apiRes.results || [];
+          setTenders(items as any);
+        } catch {
+          setTenders([]);
+        }
         if (res.error) setError(res.error);
       }
     } catch (err: any) {
@@ -75,13 +90,14 @@ function TendersListInner() {
   };
 
   useEffect(() => {
-    if (initialQuery) {
+    if (initialQuery || initialState !== "All") {
       setSearchQuery(initialQuery);
-      loadTenders(initialQuery);
+      setSelectedState(initialState);
+      loadTenders(initialQuery, initialState);
     } else {
       loadTenders();
     }
-  }, [initialQuery]);
+  }, [initialQuery, initialState]);
 
   // Load official portal directory from backend on mount
   useEffect(() => {
@@ -91,6 +107,17 @@ function TendersListInner() {
       }
     });
   }, []);
+
+  // If tender_id is provided in URL, auto-inspect it
+  useEffect(() => {
+    const targetId = searchParams.get("tender_id");
+    if (targetId && tenders.length > 0) {
+      const match = tenders.find((t) => t.tender_id === targetId || t.tender_number === targetId);
+      if (match && (!inspectTender || (inspectTender.tender_id !== match.tender_id && inspectTender.tender_number !== match.tender_number))) {
+        handleInspect(match.tender_number || match.tender_id);
+      }
+    }
+  }, [searchParams.get("tender_id"), tenders]);
 
   const displayedPortals = portalsList.filter((p) => {
     if (portalFilterType !== "All" && p.type !== portalFilterType) return false;
@@ -117,7 +144,7 @@ function TendersListInner() {
       return;
     }
     startTransition(() => {
-      loadTenders(query);
+      loadTenders(query, selectedState);
     });
   };
 
@@ -128,7 +155,7 @@ function TendersListInner() {
     try {
       const detailed = await getTenderDetail(tenderNumber, "detailed");
       setInspectTender(detailed || tenders.find((t) => t.tender_number === tenderNumber) || null);
-    } catch (err) {
+    } catch {
       setInspectTender(tenders.find((t) => t.tender_number === tenderNumber) || null);
     } finally {
       setInspectLoading(false);
@@ -231,9 +258,9 @@ function TendersListInner() {
         <DashboardHeader />
 
         <main className="w-full pt-16 bg-surface min-h-screen">
-          <div className="px-4 sm:px-8 xl:px-12 py-8 flex flex-col gap-6 max-w-[1500px] mx-auto w-full pb-24">
+          <div className="flex flex-col w-full max-w-[1500px] mx-auto px-4 sm:px-8 xl:px-12 py-8">
             {/* Page Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -249,7 +276,8 @@ function TendersListInner() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-3">
+              {/* Status / Quick Stats */}
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   onClick={() => setIsPortalsModalOpen(true)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-surface-container-high text-primary text-xs font-bold neu-button hover:bg-surface-container-highest transition-all cursor-pointer"
@@ -323,7 +351,7 @@ function TendersListInner() {
             </div>
 
             {/* Filter & Live Search Bar */}
-            <div className="bg-surface-container-lowest neu-flat p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div className="bg-surface-container-lowest neu-flat p-4 sm:p-5 rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 mt-6">
               {/* Portal Selector Tabs */}
               <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
                 {["All", "Bihar", "CPPP", "GeM", "IREPS"].map((portal) => (
@@ -341,8 +369,37 @@ function TendersListInner() {
                 ))}
               </div>
 
-              {/* Live search input */}
-              <form onSubmit={handleSearch} className="relative flex-1 max-w-lg flex items-center gap-2">
+              {/* State Filter Dropdown + Search input */}
+              <form onSubmit={handleSearch} className="relative flex-1 max-w-xl flex items-center gap-2">
+                <select
+                  value={selectedState}
+                  onChange={(e) => {
+                    const newState = e.target.value;
+                    setSelectedState(newState);
+                    loadTenders(searchQuery, newState);
+                  }}
+                  aria-label="Filter by state"
+                  className="px-3 py-2.5 rounded-xl neu-pressed text-xs font-semibold text-on-surface bg-surface-container-low focus:outline-none cursor-pointer border border-outline-variant/30"
+                >
+                  <option value="All">All States</option>
+                  <option value="Bihar">Bihar</option>
+                  <option value="Delhi">Delhi</option>
+                  <option value="Maharashtra">Maharashtra</option>
+                  <option value="Uttar Pradesh">Uttar Pradesh</option>
+                  <option value="Rajasthan">Rajasthan</option>
+                  <option value="Gujarat">Gujarat</option>
+                  <option value="Karnataka">Karnataka</option>
+                  <option value="Tamil Nadu">Tamil Nadu</option>
+                  <option value="West Bengal">West Bengal</option>
+                  <option value="Madhya Pradesh">Madhya Pradesh</option>
+                  <option value="Haryana">Haryana</option>
+                  <option value="Punjab">Punjab</option>
+                  <option value="Jharkhand">Jharkhand</option>
+                  <option value="Odisha">Odisha</option>
+                  <option value="Telangana">Telangana</option>
+                  <option value="Andhra Pradesh">Andhra Pradesh</option>
+                </select>
+
                 <div className="relative w-full">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-lg">
                     search
@@ -367,7 +424,7 @@ function TendersListInner() {
 
             {/* Error Message */}
             {error && (
-              <div className="p-4 rounded-xl bg-error-container text-on-error-container text-xs flex items-center gap-2">
+              <div className="p-4 rounded-xl bg-error-container text-on-error-container text-xs flex items-center gap-2 mt-4">
                 <span className="material-symbols-outlined text-lg">error</span>
                 <span>{error}</span>
               </div>
@@ -375,7 +432,7 @@ function TendersListInner() {
 
             {/* Loading Skeleton */}
             {loading && (
-              <div className="flex flex-col gap-4 py-8 items-center justify-center">
+              <div className="flex flex-col gap-4 py-12 items-center justify-center">
                 <div className="w-10 h-10 border-4 border-secondary border-t-transparent rounded-full animate-spin" />
                 <span className="text-xs text-on-surface-variant font-medium">Querying live backend discovery index...</span>
               </div>
@@ -383,7 +440,7 @@ function TendersListInner() {
 
             {/* Empty State */}
             {!loading && filteredTenders.length === 0 && (
-              <div className="p-12 text-center bg-surface-container-lowest neu-flat rounded-2xl flex flex-col items-center justify-center gap-3">
+              <div className="p-12 text-center bg-surface-container-lowest neu-flat rounded-2xl flex flex-col items-center justify-center gap-3 mt-6">
                 <span className="material-symbols-outlined text-4xl text-on-surface-variant">search_off</span>
                 <h3 className="font-serif text-lg font-bold text-primary">No Matching Tenders Found</h3>
                 <p className="text-xs text-on-surface-variant max-w-md">
@@ -408,7 +465,8 @@ function TendersListInner() {
                     onClick={() => {
                       setSearchQuery("");
                       setSelectedPortal("All");
-                      loadTenders("");
+                      setSelectedState("All");
+                      loadTenders("", "All");
                     }}
                     className="px-4 py-2 rounded-full neu-button text-xs font-bold text-primary cursor-pointer"
                   >
@@ -420,7 +478,7 @@ function TendersListInner() {
 
             {/* Live Tenders List */}
             {!loading && (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-4 mt-6">
                 {filteredTenders.map((tender) => {
                   const val = tender.estimated_value_inr;
                   const valStr = val ? formatINR(val) : "Not Specified";
@@ -430,7 +488,7 @@ function TendersListInner() {
 
                   return (
                     <div
-                      key={tender.tender_id}
+                      key={tender.tender_id || tender.tender_number}
                       className="bg-surface-container-lowest neu-flat rounded-2xl p-5 sm:p-6 hover:-translate-y-0.5 transition-all flex flex-col gap-4"
                     >
                       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -760,7 +818,7 @@ function TendersListInner() {
             {/* Modal Footer */}
             <div className="p-4 border-t border-gray-200/80 bg-surface-container-low flex items-center justify-between">
               <span className="text-xs text-on-surface-variant font-mono">
-                ID: {inspectTender.tender_id}
+                ID: {inspectTender.tender_id || inspectTender.tender_number}
               </span>
               <div className="flex items-center gap-3">
                 <Link
@@ -1149,11 +1207,15 @@ function TendersListInner() {
                         <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant font-bold">
                           {p.code}
                         </span>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
-                          p.type === "State" ? "bg-emerald-50 text-emerald-700" :
-                          p.type === "Union Territory" ? "bg-blue-50 text-blue-700" :
-                          "bg-purple-50 text-purple-700"
-                        }`}>
+                        <span
+                          className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${
+                            p.type === "State"
+                              ? "bg-emerald-50 text-emerald-700"
+                              : p.type === "Union Territory"
+                              ? "bg-blue-50 text-blue-700"
+                              : "bg-purple-50 text-purple-700"
+                          }`}
+                        >
                           {p.type}
                         </span>
                       </div>
@@ -1220,7 +1282,16 @@ function TendersListInner() {
 
 export default function OpenTendersPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface flex items-center justify-center text-sm text-[#735368]">Loading tenders workspace...</div>}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-surface flex items-center justify-center">
+          <div className="flex items-center gap-3 px-6 py-4 rounded-2xl neu-flat bg-white text-slate-700 text-sm font-semibold">
+            <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin"></span>
+            <span>Loading procurement tenders workspace...</span>
+          </div>
+        </div>
+      }
+    >
       <TendersListInner />
     </Suspense>
   );

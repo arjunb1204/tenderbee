@@ -1,12 +1,19 @@
 """
 API Views for RulePack Review, Human Confirmation, and Freezing.
+Enforces:
+- Only Reviewer or Owner can confirm/freeze rule packs.
+- Once frozen, a rule pack is cryptographically immutable.
+- Strict tenant isolation (404 on cross-tenant access).
 """
-from rest_framework import status, permissions
+from rest_framework import status, generics, permissions
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.http import Http404
 
-from apps.accounts.utils import get_tenant_org_id
-from apps.audit.models import AuditEventType, AuditLogEntry
+from apps.accounts.permissions import IsMember, IsReviewerOrOwner, TenantIsolationMixin
+from apps.audit.models import AuditEventType
+from apps.audit.services import record_audit_event
 from apps.rules.models import RulePack, RulePackItem, RulePackStatus
 from apps.rules.serializers import (
     RulePackFreezeSerializer,
@@ -16,62 +23,58 @@ from apps.rules.serializers import (
 )
 
 
-class RulePackListAPIView(APIView):
+class RulePackPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+
+class RulePackListAPIView(TenantIsolationMixin, generics.ListAPIView):
     """
     GET /api/v1/rules/
-    Lists RulePacks for the current tenant. Optionally filter by ?tender_id=<id>.
+    Lists RulePacks for the authenticated tenant organization.
     """
-    permission_classes = [permissions.AllowAny]
+    queryset = RulePack.objects.all()
+    serializer_class = RulePackSerializer
+    permission_classes = [IsMember]
+    pagination_class = RulePackPagination
 
-    def get(self, request, *args, **kwargs):
-        org_id = get_tenant_org_id(request)
-        tender_id = request.query_params.get("tender_id")
-        queryset = RulePack.objects.filter(organization_id=org_id)
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        tender_id = self.request.query_params.get("tender_id")
         if tender_id:
             queryset = queryset.filter(tender_id=tender_id)
-
-        serializer = RulePackSerializer(queryset, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        return queryset
 
 
-class RulePackDetailAPIView(APIView):
+class RulePackDetailAPIView(TenantIsolationMixin, generics.RetrieveAPIView):
     """
-    GET /api/v1/rules/<rule_pack_id>/
-    Retrieves full details of a RulePack and all child rules.
+    GET /api/v1/rules/<id>/
+    Retrieves full details of a RulePack with cross-tenant 404 isolation.
     """
-    permission_classes = [permissions.AllowAny]
-
-    def get(self, request, rule_pack_id, *args, **kwargs):
-        org_id = get_tenant_org_id(request)
-        try:
-            rule_pack = RulePack.objects.get(id=rule_pack_id, organization_id=org_id)
-        except RulePack.DoesNotExist:
-            return Response(
-                {"error": f"RulePack '{rule_pack_id}' not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        serializer = RulePackSerializer(rule_pack)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+    serializer_class = RulePackSerializer
+    permission_classes = [IsMember]
+    queryset = RulePack.objects.all()
+    lookup_field = "id"
+    lookup_url_kwarg = "rule_pack_id"
 
 
 class RulePackFreezeAPIView(APIView):
     """
     POST /api/v1/rules/<rule_pack_id>/confirm/
-    Cryptographically freezes a draft RulePack with SHA-256 integrity hash
-    and writes an append-only audit event.
+    Cryptographically freezes a draft RulePack with SHA-256 integrity hash.
+    Strictly restricted to Reviewer and Owner roles.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsReviewerOrOwner]
 
     def post(self, request, rule_pack_id, *args, **kwargs):
-        org_id = get_tenant_org_id(request)
+        user = request.user
+        org = user.organization
+
         try:
-            rule_pack = RulePack.objects.get(id=rule_pack_id, organization_id=org_id)
+            rule_pack = RulePack.objects.get(id=rule_pack_id, organization=org)
         except RulePack.DoesNotExist:
-            return Response(
-                {"error": f"RulePack '{rule_pack_id}' not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
+            raise Http404("RulePack not found.")
 
         if rule_pack.status == RulePackStatus.FROZEN:
             return Response(
@@ -88,14 +91,14 @@ class RulePackFreezeAPIView(APIView):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        confirmed_by = serializer.validated_data["confirmed_by"]
+        confirmed_by = serializer.validated_data.get("confirmed_by") or user.email
         rule_pack.freeze(confirmed_by_name=confirmed_by)
 
         # Append to audit trail
-        AuditLogEntry.objects.create(
-            organization_id=org_id,
+        record_audit_event(
+            organization=org,
+            actor=confirmed_by or user.email,
             event_type=AuditEventType.RULE_PACK_FROZEN,
-            actor=confirmed_by,
             target_id=rule_pack.id,
             details={
                 "tender_id": rule_pack.tender_id,
@@ -123,17 +126,19 @@ class RulePackFreezeAPIView(APIView):
 class RuleItemUpdateAPIView(APIView):
     """
     PATCH /api/v1/rules/<rule_pack_id>/items/<item_id>/
-    Allows human reviewer to dismiss or modify a rule while the RulePack is in DRAFT.
+    Allows human Reviewer/Owner to dismiss or modify a rule while the RulePack is in DRAFT.
     Modifications are strictly blocked once FROZEN.
     """
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsReviewerOrOwner]
 
     def patch(self, request, rule_pack_id, item_id, *args, **kwargs):
-        org_id = get_tenant_org_id(request)
+        user = request.user
+        org = user.organization
+
         try:
-            rule_pack = RulePack.objects.get(id=rule_pack_id, organization_id=org_id)
+            rule_pack = RulePack.objects.get(id=rule_pack_id, organization=org)
         except RulePack.DoesNotExist:
-            return Response({"error": "RulePack not found."}, status=status.HTTP_404_NOT_FOUND)
+            raise Http404("RulePack not found.")
 
         if rule_pack.status == RulePackStatus.FROZEN:
             return Response(
@@ -144,7 +149,7 @@ class RuleItemUpdateAPIView(APIView):
         try:
             item = RulePackItem.objects.get(id=item_id, rule_pack=rule_pack)
         except RulePackItem.DoesNotExist:
-            return Response({"error": "Rule item not found."}, status=status.HTTP_404_NOT_FOUND)
+            raise Http404("Rule item not found.")
 
         serializer = RulePackItemUpdateSerializer(item, data=request.data, partial=True)
         if not serializer.is_valid():

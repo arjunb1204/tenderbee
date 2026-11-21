@@ -339,7 +339,7 @@ class TenderStorage:
             cursor = conn.cursor()
             cursor.execute(sql, params)
             for row in cursor.fetchall():
-                results.append({
+                t_item = {
                     "tender_id": row["tender_id"],
                     "tender_number": row["external_id"],
                     "title": row["title"],
@@ -353,7 +353,40 @@ class TenderStorage:
                     "portal": row["portal"] or "Government Portal",
                     "source_url": row["source_url"],
                     "status": "ACTIVE",
-                })
+                }
+
+                # Attach snapshot skimmed fields if available
+                alt_id = f"tnd_{self.compute_sha256(row['external_id'])[:12]}"
+                cursor2 = conn.cursor()
+                cursor2.execute("""
+                    SELECT extracted_json_path, content_hash FROM tender_snapshots
+                    WHERE tender_id = ? OR tender_id = ?
+                    ORDER BY fetched_at DESC LIMIT 1
+                """, (row["tender_id"], alt_id))
+                snap_row = cursor2.fetchone()
+                if snap_row:
+                    t_item["content_hash"] = snap_row["content_hash"]
+                    ext_path = Path(snap_row["extracted_json_path"])
+                    if ext_path.exists():
+                        try:
+                            with open(ext_path, "r", encoding="utf-8") as f:
+                                snap_data = json.load(f)
+                                if isinstance(snap_data, dict):
+                                    for k in (
+                                        "tender_fee_inr", "processing_fee_inr", "dealing_officer",
+                                        "org_hierarchy", "mandatory_documents", "attachments",
+                                        "nit_attachment", "boq_attachment", "summary"
+                                    ):
+                                        if k in snap_data and k not in t_item:
+                                            t_item[k] = snap_data[k]
+                                    if snap_data.get("estimated_value_inr") is not None and t_item["estimated_value_inr"] is None:
+                                        t_item["estimated_value_inr"] = snap_data["estimated_value_inr"]
+                                    if snap_data.get("emd_amount_inr") is not None and t_item["emd_amount_inr"] is None:
+                                        t_item["emd_amount_inr"] = snap_data["emd_amount_inr"]
+                        except Exception:
+                            pass
+
+                results.append(t_item)
 
         return results
 
@@ -397,7 +430,7 @@ class TenderStorage:
             state = row["state"] or "All India"
             cat = row["category"] or "Services"
 
-            val_str = f"₹{val:,.2f}" if val else "Not Specified"
+            val_str = f"â‚¹{val:,.2f}" if val else "Not Specified"
             summary_str = f"{val_str} | {tenure}M | {cat} in {state}" if tenure else f"{val_str} | {cat} in {state}"
 
             tender_dict = {
@@ -474,3 +507,161 @@ class TenderStorage:
             return tender_dict
 
 
+# ==============================================================================
+# Unified Single Storage Adapter Interface (put, get, delete, exists)
+# ==============================================================================
+
+class StorageBackend:
+    """Base interface for swappable storage providers."""
+    def put(self, key: str, data: bytes, content_type: Optional[str] = None) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def get(self, key: str) -> Optional[bytes]:
+        raise NotImplementedError
+
+    def delete(self, key: str) -> bool:
+        raise NotImplementedError
+
+    def exists(self, key: str) -> bool:
+        raise NotImplementedError
+
+
+class InMemoryStorageBackend(StorageBackend):
+    """Fast in-memory storage backend for unit tests and local isolation."""
+    def __init__(self):
+        self._store: Dict[str, bytes] = {}
+
+    def put(self, key: str, data: bytes, content_type: Optional[str] = None) -> Dict[str, Any]:
+        self._store[key] = bytes(data)
+        return {
+            "key": key,
+            "size": len(data),
+            "content_type": content_type or "application/octet-stream",
+            "backend": "memory",
+        }
+
+    def get(self, key: str) -> Optional[bytes]:
+        return self._store.get(key)
+
+    def delete(self, key: str) -> bool:
+        if key in self._store:
+            del self._store[key]
+            return True
+        return False
+
+    def exists(self, key: str) -> bool:
+        return key in self._store
+
+
+class DiskStorageBackend(StorageBackend):
+    """Secure local disk storage backend strictly validating keys against path traversal."""
+    def __init__(self, base_dir: Optional[Path] = None):
+        if base_dir:
+            self.base_dir = Path(base_dir).resolve()
+        else:
+            self.base_dir = (Path(__file__).resolve().parents[2] / "data" / "vault").resolve()
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+
+    def _resolve_safe_path(self, key: str) -> Path:
+        """Guarantees key stays strictly within base_dir and contains no path traversal."""
+        clean_key = key.lstrip("/\\")
+        target_path = (self.base_dir / clean_key).resolve()
+        if not str(target_path).startswith(str(self.base_dir)):
+            raise ValueError(f"Path traversal detected in storage key: {key}")
+        return target_path
+
+    def put(self, key: str, data: bytes, content_type: Optional[str] = None) -> Dict[str, Any]:
+        target_path = self._resolve_safe_path(key)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "wb") as f:
+            f.write(data)
+        return {
+            "key": key,
+            "size": len(data),
+            "content_type": content_type or "application/octet-stream",
+            "path": str(target_path),
+            "backend": "disk",
+        }
+
+    def get(self, key: str) -> Optional[bytes]:
+        target_path = self._resolve_safe_path(key)
+        if not target_path.exists() or not target_path.is_file():
+            return None
+        with open(target_path, "rb") as f:
+            return f.read()
+
+    def delete(self, key: str) -> bool:
+        target_path = self._resolve_safe_path(key)
+        if target_path.exists() and target_path.is_file():
+            target_path.unlink()
+            return True
+        return False
+
+    def exists(self, key: str) -> bool:
+        target_path = self._resolve_safe_path(key)
+        return target_path.exists() and target_path.is_file()
+
+
+class B2StorageBackend(StorageBackend):
+    """Backblaze B2 S3-compatible cloud object storage backend."""
+    def __init__(self):
+        from backend.services.b2_storage import BackblazeB2Storage
+        self.b2 = BackblazeB2Storage()
+
+    def put(self, key: str, data: bytes, content_type: Optional[str] = None) -> Dict[str, Any]:
+        return self.b2.upload_bytes(key=key, data=data, content_type=content_type or "application/pdf")
+
+    def get(self, key: str) -> Optional[bytes]:
+        return self.b2.download_bytes(key)
+
+    def delete(self, key: str) -> bool:
+        return self.b2.delete_file(key)
+
+    def exists(self, key: str) -> bool:
+        return self.b2.file_exists(key)
+
+
+def _init_default_storage() -> StorageBackend:
+    backend_type = os.getenv("STORAGE_BACKEND", "").lower()
+    if backend_type == "b2" or os.getenv("B2_APPLICATION_KEY_ID") or os.getenv("B2_KEY_ID"):
+        try:
+            return B2StorageBackend()
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Failed to initialize B2StorageBackend: %s. Using DiskStorageBackend.", e)
+    return DiskStorageBackend()
+
+
+# Global storage adapter instance
+_active_backend: StorageBackend = _init_default_storage()
+
+
+def set_storage_backend(backend: StorageBackend):
+    """Allows setting an in-memory or alternative backend for testing."""
+    global _active_backend
+    _active_backend = backend
+
+
+def get_storage_backend() -> StorageBackend:
+    return _active_backend
+
+
+
+def put(key: str, data: bytes, content_type: Optional[str] = None) -> Dict[str, Any]:
+    """Store data under the specified key."""
+    return _active_backend.put(key, data, content_type=content_type)
+
+
+def get(key: str) -> Optional[bytes]:
+    """Retrieve data stored under key."""
+    return _active_backend.get(key)
+
+
+def delete(key: str) -> bool:
+    """Delete object stored under key."""
+    return _active_backend.delete(key)
+
+
+def exists(key: str) -> bool:
+    """Check if object exists under key."""
+    return _active_backend.exists(key)

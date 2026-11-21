@@ -1,10 +1,13 @@
 """
-Serializers for User authentication, Registration, and JWT Token with tenant claims.
+Strict Serializers for User authentication, Registration, Profile, and Token Management.
+Enforces explicit fields, read-only guarantees, and Django password validation.
 """
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from django.contrib.auth import get_user_model
-from django.db import transaction
 from apps.accounts.models import Organization, UserRole
 
 User = get_user_model()
@@ -17,36 +20,19 @@ class OrganizationSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "created_at")
 
 
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """
-    Custom JWT Token Serializer that injects tenant context into claims.
-    """
-    @classmethod
-    def get_token(cls, user):
-        token = super().get_token(user)
-        # Custom claims embedded into JWT token payload
-        token["email"] = user.email
-        token["role"] = user.role
-        token["org_id"] = user.organization.id if user.organization else "org_default"
-        token["org_name"] = user.organization.name if user.organization else "Default Tenant"
-        return token
+class UserProfileSerializer(serializers.ModelSerializer):
+    organization = OrganizationSerializer(read_only=True)
 
-    def validate(self, attrs):
-        data = super().validate(attrs)
-        # Add profile info directly into the login response
-        data["user"] = {
-            "id": self.user.id,
-            "email": self.user.email,
-            "username": self.user.username,
-            "role": self.user.role,
-            "organization": OrganizationSerializer(self.user.organization).data if self.user.organization else None,
-        }
-        return data
+    class Meta:
+        model = User
+        fields = ("id", "email", "username", "role", "organization", "date_joined")
+        read_only_fields = ("id", "email", "username", "role", "organization", "date_joined")
 
 
 class UserRegistrationSerializer(serializers.Serializer):
     """
-    Serializer for creating a new Organization tenant along with the initial Admin user.
+    Registers a new tenant Organization and creates the primary Owner user.
+    Enforces Django's Argon2-backed password validators.
     """
     organization_name = serializers.CharField(max_length=255, required=True)
     gstin = serializers.CharField(max_length=15, required=False, allow_blank=True)
@@ -58,8 +44,16 @@ class UserRegistrationSerializer(serializers.Serializer):
     password = serializers.CharField(write_only=True, min_length=8)
 
     def validate_email(self, value):
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A user with this email already exists.")
+        normalized = value.strip().lower()
+        if User.objects.filter(email__iexact=normalized).exists():
+            raise serializers.ValidationError("An account with this email address already exists.")
+        return normalized
+
+    def validate_password(self, value):
+        try:
+            validate_password(value)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(list(exc.messages))
         return value
 
     def create(self, validated_data):
@@ -68,7 +62,7 @@ class UserRegistrationSerializer(serializers.Serializer):
         udyam = validated_data.get("udyam_number", "")
         pan = validated_data.get("pan", "")
 
-        email = validated_data["email"]
+        email = validated_data["email"].lower()
         username = validated_data.get("username") or email.split("@")[0]
         password = validated_data["password"]
 
@@ -84,15 +78,21 @@ class UserRegistrationSerializer(serializers.Serializer):
                 email=email,
                 password=password,
                 organization=org,
-                role=UserRole.ADMIN,
+                role=UserRole.OWNER,
             )
         return user
 
 
-class UserProfileSerializer(serializers.ModelSerializer):
-    organization = OrganizationSerializer(read_only=True)
+class LoginSerializer(serializers.Serializer):
+    """
+    Authentication input serializer.
+    """
+    email = serializers.EmailField(required=True)
+    password = serializers.CharField(write_only=True, required=True)
 
-    class Meta:
-        model = User
-        fields = ("id", "email", "username", "role", "organization", "date_joined")
-        read_only_fields = fields
+
+class TokenRefreshCookieSerializer(serializers.Serializer):
+    """
+    Refresh token input serializer supporting cookie and body.
+    """
+    refresh = serializers.CharField(required=False, allow_blank=True)

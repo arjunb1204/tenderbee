@@ -64,7 +64,7 @@ class UniversalTenderScraper:
         3. Routes to appropriate portal adapter (GeM, GePNIC, or TinyFish).
         4. Saves snapshot and returns standardized extraction dict.
         """
-        # Step 1: Check cache
+        # Step 1: Check cache & indexed tender master
         if not force_refresh:
             cached_snapshot = self.storage.get_snapshot_by_tender_number(tender_number=identifier, org_id=org_id)
             if cached_snapshot:
@@ -73,6 +73,14 @@ class UniversalTenderScraper:
                     "success": True,
                     "is_cached": True,
                     "tender": cached_snapshot,
+                }
+            indexed_tender = self.storage.get_tender(identifier)
+            if indexed_tender:
+                logger.info("Universal scraper found indexed tender master for '%s'", identifier)
+                return {
+                    "success": True,
+                    "is_cached": True,
+                    "tender": indexed_tender,
                 }
 
         # Step 2: Attempt direct official PDF download

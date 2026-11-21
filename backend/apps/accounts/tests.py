@@ -9,6 +9,8 @@ from apps.accounts.models import Organization, User, UserRole
 
 class AccountsJWTAuthTests(APITestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.register_url = reverse("accounts:auth-register")
         self.token_url = reverse("accounts:token-obtain-pair")
         self.me_url = reverse("accounts:auth-me")
@@ -32,11 +34,11 @@ class AccountsJWTAuthTests(APITestCase):
 
         # Verify DB records
         user = User.objects.get(email="bidlead@bharatinfra.in")
-        self.assertEqual(user.role, UserRole.ADMIN)
+        self.assertEqual(user.role, UserRole.OWNER)
         self.assertTrue(user.organization.id.startswith("org_"))
 
     def test_jwt_token_obtain_and_custom_claims(self):
-        """Verifies obtaining JWT token and validating custom claims (org_id, role)."""
+        """Verifies obtaining JWT token in httpOnly cookies and validating custom claims."""
         # First register
         org = Organization.objects.create(name="Tata Tech Solutions")
         user = User.objects.create_user(
@@ -44,7 +46,7 @@ class AccountsJWTAuthTests(APITestCase):
             username="tatamanager",
             password="SecurePassTata123",
             organization=org,
-            role=UserRole.BID_MANAGER,
+            role=UserRole.MEMBER,
         )
 
         # Login
@@ -54,14 +56,12 @@ class AccountsJWTAuthTests(APITestCase):
         }
         response = self.client.post(self.token_url, payload, format="json")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertIn("access", response.data)
-        self.assertIn("refresh", response.data)
-        self.assertEqual(response.data["user"]["role"], "bid_manager")
+        self.assertIn("access_token", response.cookies)
+        self.assertIn("refresh_token", response.cookies)
+        self.assertEqual(response.data["user"]["role"], "member")
         self.assertEqual(response.data["user"]["organization"]["id"], org.id)
 
-        # Access protected endpoint with Bearer token
-        access_token = response.data["access"]
-        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+        # Access protected endpoint with cookie
         me_resp = self.client.get(self.me_url)
         self.assertEqual(me_resp.status_code, status.HTTP_200_OK)
         self.assertEqual(me_resp.data["email"], "manager@tatatech.com")

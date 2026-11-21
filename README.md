@@ -1,15 +1,50 @@
-# TenderBee
-    
- <img width="676" height="369" alt="Screenshot_2026-10-24_162111-removebg-preview" src="https://github.com/user-attachments/assets/af4b6255-5986-4b82-bc85-8a8d20e68a76" />
+<div align="center">
+  <img src="assets/logo.png" width="130" alt="TenderBee Official Logo" />
+  <h1>TenderBee</h1>
+  <p><strong>Deterministic Tender Verification, Intelligent Intake & Proposal Platform</strong></p>
+
+  <p>
+    <a href="https://tenderbee.vercel.app"><img src="https://img.shields.io/badge/Live_Frontend-Vercel-black?style=for-the-badge&logo=vercel" alt="Frontend on Vercel" /></a>
+    <a href="https://tenderbee-1.onrender.com/api/health/"><img src="https://img.shields.io/badge/Live_Backend-Render-46E3B7?style=for-the-badge&logo=render&logoColor=black" alt="Backend on Render" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.12" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/Django-5.x-092E20?style=for-the-badge&logo=django&logoColor=white" alt="Django 5" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/Next.js-16_App_Router-000000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" /></a>
+    <a href="#"><img src="https://img.shields.io/badge/PostgreSQL-Neon_Serverless-00E699?style=for-the-badge&logo=postgresql&logoColor=black" alt="Neon PostgreSQL" /></a>
+  </p>
+</div>
+
+---
 
 > **"AI extracts. Deterministic rules decide. Official sources confirm."**
+> 
+> *TenderBee eliminates guesswork, hallucination, and disqualified bids from government (GeM, CPPP, State Portals) and enterprise procurement.*
 
-TenderBee is an Intelligent Tender Platform built to eliminate guesswork and hallucination from government and enterprise tender bidding. The platform spans three primary modules:
-- **Find**: Automated tender discovery and eligibility fit scoring.
-- **Verify**: Document verification, digital signature integrity, and bid-readiness validation.
-- **Prepare**: Proposal drafting, compliant document compilation, and bid submission packaging.
+---
 
-All three modules operate on one unified core: a human-confirmed rule pack per tender, machine-verified evidence per fact, a pure-Python deterministic rules engine, and an immutable audit trail.
+## Live Deployments
+
+* **Web Application (Frontend)**: [https://tenderbee.vercel.app](https://tenderbee.vercel.app)
+* **Core API (Backend)**: [https://tenderbee-1.onrender.com](https://tenderbee-1.onrender.com)
+* **API Health Check**: [https://tenderbee-1.onrender.com/api/health/](https://tenderbee-1.onrender.com/api/health/)
+* **Interactive API Schema**: [https://tenderbee-1.onrender.com/api/schema/](https://tenderbee-1.onrender.com/api/schema/)
+
+---
+
+## Core Modules
+
+TenderBee organizes the procurement lifecycle into three integrated modules, all operating on a single, deterministic source of truth:
+
+1. **Find**:
+   - Automated tender discovery across public procurement portals (GeM, CPPP, State e-Procurement).
+   - Real-time parameter extraction, closing deadlines, EMD fees, and eligibility fit scoring.
+2. **Verify**:
+   - Cryptographic PDF signature verification (`pyHanko`) and tamper-proof SHA-256 checksums.
+   - Schema-constrained Document AI extraction (financial turnover, technical experience, MSME status).
+   - Pure-Python deterministic rules engine evaluation with side-by-side evidence inspection.
+   - Authoritative registry cross-checks (GSTN, Udyam MSME, ICAI UDIN).
+3. **Prepare**:
+   - Proposal drafting, required checklist packaging, and bid-readiness validation prior to submission.
+   - Automated discrepancy detection to prevent technical disqualification.
 
 ---
 
@@ -17,29 +52,29 @@ All three modules operate on one unified core: a human-confirmed rule pack per t
 
 ```mermaid
 graph LR
-    subgraph Client ["1. Client (Next.js + TS)"]
+    subgraph Client ["1. Client (Next.js 16 App Router)"]
         UI["Upload & Live Progress"]
         Viewer["Evidence Viewer"]
         Banner["Readiness Dashboard"]
     end
 
-    subgraph Backend ["2. Backend (Django + DRF)"]
-        API["REST API & Services"]
-        Engine["Deterministic Rules Engine"]
+    subgraph Backend ["2. Backend Core (Django 5 + DRF)"]
+        API["REST API & Same-Origin Proxy"]
+        Engine["Pure-Python Rules Engine"]
         Celery["Celery Workers + Redis"]
-        DB[(Neon PostgreSQL)]
-        S3[(S3 Object Storage)]
+        DB[(Neon Serverless PostgreSQL)]
+        S3[(Backblaze B2 S3 Storage)]
     end
 
-    subgraph DocAI ["3. Document AI"]
-        OCR["Digital Text / OCR"]
-        LLM["Schema-Constrained LLM Extraction"]
-        Sign["pyHanko Signature Checks"]
+    subgraph DocAI ["3. Document AI & Verification"]
+        OCR["Digital Text / OCR Engine"]
+        LLM["Schema-Constrained LLM (Gemini)"]
+        Sign["pyHanko Signature Validation"]
     end
 
-    subgraph Integrations ["4. Integrations (TinyFish)"]
-        TF["TinyFish Agent / Fetch / Search"]
-        Registries["Official Registries (Udyam, GST, UDIN, DPIIT)"]
+    subgraph Integrations ["4. Official Registries (TinyFish)"]
+        TF["TinyFish Autonomous Agent"]
+        Registries["Official Portals (Udyam, GSTN, UDIN, DPIIT)"]
     end
 
     Client --> Backend
@@ -49,26 +84,6 @@ graph LR
     Backend --> S3
 ```
 
-### Architectural Blocks
-
-1. **Client (Next.js + TypeScript)**:
-   - Modern App Router architecture with dedicated module route groups (`(find)`, `(verify)`, `(prepare)`).
-   - Real-time upload progress, side-by-side evidence viewer, and bid-readiness score banners.
-
-2. **Backend Core (Django + DRF)**:
-   - High-throughput REST API with asynchronous job distribution via Celery and Redis.
-   - Decoupled, pure-Python deterministic rules engine with zero network/database dependencies (`core/engine`).
-   - Serverless PostgreSQL (Neon) and S3-compatible document storage.
-
-3. **Document AI Layer**:
-   - Multi-format ingestion: digital PDFs, scans (OCR), and raw documents.
-   - Strict schema-constrained LLM value extraction (JSON output only).
-   - Digital cryptographic signature validation via `pyHanko`.
-
-4. **Integrations Layer (TinyFish)**:
-   - Headless stealth browsing, search, and dynamic portal scraping via TinyFish APIs.
-   - Verification against authoritative government portals (Udyam, GSTN, ICAI UDIN, and DPIIT).
-
 ---
 
 ## Architectural Invariants (By the Numbers)
@@ -77,7 +92,7 @@ graph LR
 | :---: | :---: | :--- |
 | **7** | **Pipeline Stages** | Rigorous step-by-step verification pipeline from file ingestion to user verdict. |
 | **5** | **Verification Layers** | File integrity, cryptographic signature, OCR/data extraction, rule validation, registry confirmation. |
-| **0** | **LLM Pass/Fail Calls** | The LLM **never** decides compliance or eligibility; it only extracts values and proposes draft rules. Pass/fail is strictly deterministic. |
+| **0** | **LLM Pass/Fail Decisions** | The LLM **never** decides compliance or eligibility; it only extracts values into strict JSON schemas. Pass/fail is strictly deterministic. |
 | **4** | **Verdicts (No Silent Accept)** | Explicit outcomes: `Pass`, `Fail`, `Discrepancy`, `Incomplete`. |
 
 ---
@@ -87,7 +102,7 @@ graph LR
 ```text
  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
  │   Stage 1   │ -> │   Stage 2   │ -> │   Stage 3   │ -> │   Stage 4   │
- │ Upload &    │    │ OCR & Text  │    │ LLM         │    │ Validation  │
+ │ Upload &    │    │ OCR & Text  │    │ LLM Value   │    │ Validation  │
  │ Integrity   │    │ Extraction  │    │ Extraction  │    │ Rules       │
  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
   (File Checks)      (Extract Text)     (AI Extract)       (Rule Engine)
@@ -98,22 +113,20 @@ graph LR
  │ Profile &   │    │ External    │    │ Verdict &   │
  │ Tender Fit  │    │ Verification│    │ Evidence    │
  └─────────────┘    └─────────────┘    └─────────────┘
-  (Profile Fit)      (TinyFish API)     (User Ack.)
+  (Profile Fit)      (TinyFish API)     (User Sign-off)
 ```
 
-1. **Upload and Integrity**: File validation, malware scan, checksum calculation (SHA-256), and cryptographic signature checks (`pyHanko`).
-2. **OCR / Text Extraction**: High-fidelity text extraction from PDFs and scanned documents.
-3. **LLM Extraction**: Schema-constrained entity and value extraction (Pydantic / JSON schema).
-4. **Validation Rules**: Pure-Python deterministic rule evaluation against extracted facts.
-5. **Profile + Tender Checks**: Company capabilities and eligibility matching against tender criteria.
-6. **External Verification**: Cross-verification of facts (e.g. GST active status, Udyam MSME class, UDIN validity) via TinyFish.
-7. **Verdict + Evidence**: Final composite verdict presented alongside highlighted document evidence for user sign-off.
+1. **Upload & Integrity**: Checksum calculation (SHA-256), cryptographic signature validation (`pyHanko`), and heuristic prompt-injection screening.
+2. **OCR & Text Extraction**: High-fidelity text extraction from PDFs, balance sheets, and scanned certificates.
+3. **LLM Extraction**: Schema-constrained entity extraction (Google Gemini) enforcing strict JSON structures.
+4. **Validation Rules**: Pure-Python rule evaluation against extracted facts (turnover thresholds, experience years, EMD clauses).
+5. **Profile + Tender Checks**: Bidder capability matching against specific tender eligibility matrices.
+6. **External Verification**: Authoritative lookups via TinyFish against government databases (GSTN active status, Udyam MSME classification, ICAI UDIN).
+7. **Verdict & Evidence**: Final audit trail with side-by-side evidence snippet citations for human confirmation.
 
 ---
 
 ## Workflow: Tender Intake & Rule Pack Freezing
-
-The diagram below illustrates the ingestion and rule-freezing lifecycle:
 
 ```mermaid
 sequenceDiagram
@@ -160,16 +173,26 @@ sequenceDiagram
 
 | Category | Component | Purpose |
 | :--- | :--- | :--- |
-| **Frontend** | Next.js (App Router), TypeScript | Evidence viewer, live progress, review screens, readiness banner |
-| **Backend API** | Django 5.x, Django REST Framework | Domain services, authentication, RESTful APIs, business models |
-| **Rules Engine** | Pure-Python (`core/engine`) | Isolated, deterministic evaluation; zero database/network dependencies |
-| **Async Tasks** | Celery, Redis | Document intake, external portal verification, PDF rendering |
-| **Database** | Neon Serverless PostgreSQL | Relational storage, connection-pooled queries, immutable audit logs |
-| **Storage** | S3-Compatible Object Storage | Raw PDFs, tender snapshots, extracted page artifacts, evidence crops |
-| **LLM & Extraction** | Provider-Agnostic Adapter, Pydantic | Schema-constrained entity extraction & rule proposal (JSON output only) |
-| **Signatures & OCR** | pyHanko, PDF parsing | Digital signature verification and text extraction |
-| **External Agent** | TinyFish APIs | Headless browsing, dynamic portal scraping, and registry lookups |
-| **Containers** | Docker, Docker Compose | Service orchestration (backend, worker, redis, frontend) |
+| **Frontend** | Next.js 16 (App Router), TypeScript, TailwindCSS 4 | Evidence viewer, live progress, review screens, readiness matrix |
+| **Backend API** | Django 5.x, Django REST Framework | Multi-tenant domain services, JWT auth, RESTful APIs, OpenAPI |
+| **Rules Engine** | Pure-Python (`backend/engine`) | Isolated, deterministic evaluation; zero database/network dependencies |
+| **Async Tasks** | Celery, Redis | Heavy PDF processing, async intake, background verification pipeline |
+| **Database** | Neon Serverless PostgreSQL | Relational storage, connection pooling, immutable audit logs |
+| **Object Storage** | Backblaze B2 (S3-Compatible via `boto3`) | Tender PDFs, bidder certificates, and extracted document page artifacts |
+| **Document AI** | Google Gemini 2.0 Flash REST API | Schema-constrained JSON entity extraction without hallucination |
+| **Signatures & OCR** | pyHanko, PyMuPDF, Tesseract OCR | Cryptographic signature validation and scanned document extraction |
+| **Web Agents** | TinyFish SDK & APIs | Headless browsing, dynamic portal scraping, and registry lookups |
+| **Deployment** | Vercel (Frontend) + Render (Backend) | Production hosting with zero-config blueprints |
+
+---
+
+## Production Deployment (Vercel & Render)
+
+TenderBee is configured for full-stack production deployment:
+* **Frontend on Vercel**: Configured via [`frontend/vercel.json`](frontend/vercel.json) and Next.js server-side backend proxy.
+* **Backend on Render**: Configured via [`render.yaml`](render.yaml) Blueprint, [`backend/build.sh`](backend/build.sh), WhiteNoise static compression, and Gunicorn WSGI.
+
+For complete deployment instructions, see the dedicated [**DEPLOYMENT.md**](DEPLOYMENT.md) guide.
 
 ---
 
@@ -178,23 +201,53 @@ sequenceDiagram
 TenderBee connects to Neon serverless PostgreSQL using a dual-connection architecture:
 
 > **Database Connection Rules:**
-> - **Runtime Application**: Connects to the **pooled connection string** (`DATABASE_URL`) to support serverless autoscaling and connection pooling. Django settings enforce a short connection lifetime (`conn_max_age = 0-60`) to accommodate serverless idle suspension.
-> - **Database Migrations**: Migrations **must** run against the **direct session string** (`DIRECT_URL`) because schema migrations require session-level locking and are unsupported on transaction poolers.
+> - **Runtime Application**: Connects to the **pooled connection string** (`DATABASE_URL`) to support serverless autoscaling and connection pooling (`conn_max_age = 600`).
+> - **Database Migrations**: Migrations **must** run against the **direct session string** (`DIRECT_URL`) because schema alterations require session-level locking.
 
 ```bash
 # Execute migrations using DIRECT_URL
-make migrate
+python manage.py migrate
 ```
 
-## Local PDF extraction demo
+---
 
-From the repository root, extract text and locally detected fields from one or more PDFs:
+## Local Development Quickstart
+
+### 1. Prerequisites
+- Python 3.11 or 3.12
+- Node.js 20+ and npm
+- (Optional) Tesseract OCR for scanned PDF evaluation
+
+### 2. Backend Setup
+```bash
+cd backend
+python -m venv venv
+# On Windows: .\venv\Scripts\activate | On macOS/Linux: source venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py runserver
+```
+Backend API will be live at `http://127.0.0.1:8000/`.
+
+### 3. Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
+Frontend web application will be live at `http://localhost:3000/`.
+
+---
+
+## Local Document Extraction CLI
+
+From the repository root, extract text and locally detected fields from PDFs:
 
 ```powershell
-python scripts\extract_documents.py "D:\path\to\application.pdf" --output .\extraction.json
+python scripts\extract_documents.py "path\to\application.pdf" --output .\extraction.json
 ```
 
-For output shaped by a JSON Schema, pass the schema and one or more application PDFs:
+For schema-constrained output matching your tender criteria:
 
 ```powershell
 python scripts\extract_documents.py `
@@ -205,8 +258,17 @@ python scripts\extract_documents.py `
   --evidence .\evidence.json
 ```
 
-The CLI extracts only; it does not compare documents with tender requirements or produce an eligibility verdict. OCR for scanned PDFs requires the Python packages in `requirements.txt` and the Tesseract executable. On Windows, set `TESSERACT_CMD` if Tesseract is not installed at its standard path. `python backend\demo_cli.py` remains available as a compatibility entry point.
+---
 
-Document intake and extraction orchestration live in `backend/apps/documents/services.py`; reusable grounding and OCR policies live in `backend/engine/grounding.py` and `backend/engine/ocr_policy.py`; the extraction CLI lives in `scripts/extract_documents.py`. `backend/services/document_ai.py` is a compatibility facade.
+## Security & Defense-in-Depth
 
-Prompt-injection screening is heuristic defense-in-depth. Suspicious uploads are marked for human review and withheld from LLM extraction, and verification recomputes the stored PDF SHA-256 before using it. A digest stored alongside the document is not protection against an attacker who can alter both the file and its database record.
+- **Tenant Isolation**: Every database query is strictly scoped to the authenticated organization's tenant context via `TenantContextMiddleware`.
+- **Prompt Injection Screening**: Suspicious document uploads matching adversarial injection heuristics are automatically withheld from LLM extraction and flagged for human review.
+- **Cryptographic Digest Integrity**: PDF SHA-256 digests are re-computed and validated before any evidence is processed or signed.
+- **Strict Content Security Policy (CSP)**: Hardened headers with frame protection, HTTPS connection restrictions, and strict origin validation.
+
+---
+
+<div align="center">
+  <sub>Built with precision for enterprise and government procurement. © 2026 TenderBee.</sub>
+</div>

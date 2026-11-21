@@ -61,3 +61,41 @@ class BidderDocument(TenantAwareModel):
 
     def __str__(self):
         return f"{self.file_name} ({self.document_type}) [{self.id}]"
+
+
+class JobStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    PROCESSING = "PROCESSING", "Processing"
+    COMPLETED = "COMPLETED", "Completed"
+    FAILED = "FAILED", "Failed"
+
+
+class AsyncJob(TenantAwareModel):
+    """
+    Tracks long-running asynchronous tasks (OCR, compliance eval, PDF extraction)
+    with status, progress percentage, and tenant isolation.
+    """
+    id = models.CharField(primary_key=True, max_length=64, editable=False)
+    job_type = models.CharField(max_length=64, default="document_processing")
+    status = models.CharField(
+        max_length=32,
+        choices=JobStatus.choices,
+        default=JobStatus.PENDING,
+        db_index=True,
+    )
+    progress = models.PositiveIntegerField(default=0)
+    target_id = models.CharField(max_length=64, blank=True)
+    result = models.JSONField(default=dict)
+    error = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.id = f"job_{uuid.uuid4().hex[:16]}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Job {self.id} ({self.job_type}) [{self.status} - {self.progress}%]"
+

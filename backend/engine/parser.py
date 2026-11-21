@@ -105,21 +105,34 @@ class TenderPDFExtractor:
         digital_pages = 0
         pdf_bytes = self._read_pdf_bytes(pdf_input)
 
-        # Step 1: Extract text layer page by page
+        # Step 1: Extract text layer page by page using native digital text layer first
+        raw_pages_text = []
+        total_digital_chars = 0
         for idx, page in enumerate(reader.pages):
-            page_num = idx + 1
             raw_text = page.extract_text() or ""
-            cleaned_text = re.sub(r"[ \t]+", " ", raw_text).strip()
-            char_count = len(cleaned_text)
+            cleaned = re.sub(r"[ \t]+", " ", raw_text).strip()
+            raw_pages_text.append(cleaned)
+            total_digital_chars += len(cleaned)
 
+        has_digital_layer = total_digital_chars >= 80
+        ocr_performed_count = 0
+
+        for idx, cleaned_text in enumerate(raw_pages_text):
+            page_num = idx + 1
+            char_count = len(cleaned_text)
             is_scanned = char_count < self.min_char_threshold
-            if is_scanned:
+            # Only perform slow OCR if the document has NO digital layer at all (pure scan) on max 2 early pages
+            if is_scanned and (not has_digital_layer) and idx < 2 and ocr_performed_count < 2:
                 try:
-                    ocr_res, _ = OCRPolicy.ocr_page(pdf_bytes, idx)
-                    if ocr_res:
-                        cleaned_text = re.sub(r"[ \t]+", " ", ocr_res).strip()
+                    ocr_text, _ = OCRPolicy.ocr_page(pdf_bytes, idx)
+                    if ocr_text:
+                        cleaned_text = re.sub(r"[ \t]+", " ", ocr_text).strip()
+                        char_count = len(cleaned_text)
+                        is_scanned = char_count < self.min_char_threshold
+                    ocr_performed_count += 1
                 except Exception:
                     pass
+
             if not is_scanned or cleaned_text:
                 digital_pages += 1
 
@@ -135,21 +148,27 @@ class TenderPDFExtractor:
 
         digital_coverage = round(digital_pages / total_pages, 3)
 
-        # Step 2: Extract Tender Metadata & Procurement Parameters
+        # Step 2: Extract Tender Metadata & Procurement Parameters (Deterministic Regex)
         metadata = self._extract_tender_metadata(full_text_by_page)
 
         # Step 3: Extract Clauses & Eligibility Requirements with Page Citations
         clauses, eligibility, mandatory_docs = self._extract_clauses(full_text_by_page, metadata.get("estimated_value_inr"))
 
-        # Step 4: Optional LLM-assisted clause & parameter extraction with zero-hallucination validation
-        if self.use_llm:
-            self._enhance_with_llm(
-                full_text_by_page=full_text_by_page,
-                metadata=metadata,
-                eligibility=eligibility,
-                mandatory_docs=mandatory_docs,
-                clauses=clauses,
-            )
+        # Step 4: Optional LLM-assisted clause enhancement (Only if key fields are missing)
+        has_essential_meta = bool(
+            metadata.get("tender_number") and metadata.get("tender_title") and metadata.get("estimated_value_inr")
+        )
+        if self.use_llm and not has_essential_meta:
+            try:
+                self._enhance_with_llm(
+                    full_text_by_page=full_text_by_page,
+                    metadata=metadata,
+                    eligibility=eligibility,
+                    mandatory_docs=mandatory_docs,
+                    clauses=clauses,
+                )
+            except Exception as e:
+                logger.warning("Optional LLM extraction skipped: %s", e)
 
         return TenderPDFExtractionResult(
             tender_number=metadata.get("tender_number"),

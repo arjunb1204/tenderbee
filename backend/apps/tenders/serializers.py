@@ -54,12 +54,16 @@ class TenderSnapshotSerializer(serializers.ModelSerializer):
 
 class TenderSerializer(serializers.ModelSerializer):
     snapshots = TenderSnapshotSerializer(many=True, read_only=True)
+    tender_id = serializers.CharField(source="id", read_only=True)
+    tender_number = serializers.CharField(source="external_id", read_only=True)
 
     class Meta:
         model = Tender
         fields = (
             "id",
+            "tender_id",
             "external_id",
+            "tender_number",
             "title",
             "buyer_name",
             "buyer_location",

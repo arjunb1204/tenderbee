@@ -32,7 +32,21 @@ class VerificationAssessmentSerializer(serializers.ModelSerializer):
             "missing_documents",
             "fix_list",
             "registry_verifications",
+            "verdict_overrides",
             "assessed_by",
             "assessed_at",
         )
         read_only_fields = fields
+
+
+class VerdictOverrideSerializer(serializers.Serializer):
+    rule_id = serializers.CharField(required=True, help_text="Rule identifier being overridden (e.g. R-TURNOVER-AVG3)")
+    new_verdict = serializers.ChoiceField(
+        choices=["PASS", "FAIL", "WAIVED", "NEEDS_REVIEW"],
+        required=True,
+    )
+    reason = serializers.CharField(
+        required=True,
+        min_length=10,
+        help_text="Mandatory human justification explaining the verdict override",
+    )

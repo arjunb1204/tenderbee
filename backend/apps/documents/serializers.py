@@ -37,3 +37,21 @@ class BidderDocumentSerializer(serializers.ModelSerializer):
             "uploaded_at",
         )
         read_only_fields = fields
+
+
+class AsyncJobSerializer(serializers.ModelSerializer):
+    class Meta:
+        from apps.documents.models import AsyncJob
+        model = AsyncJob
+        fields = (
+            "id",
+            "job_type",
+            "status",
+            "progress",
+            "target_id",
+            "result",
+            "error",
+            "created_at",
+            "updated_at",
+        )
+        read_only_fields = fields

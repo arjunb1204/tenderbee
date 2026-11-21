@@ -31,8 +31,20 @@ load_dotenv()
 
 try:
     from tinyfish import TinyFish
+    from tinyfish import (
+        APIError,
+        APIConnectionError,
+        APITimeoutError,
+        AuthenticationError,
+        RateLimitError,
+    )
 except ImportError:
     TinyFish = None
+    APIError = Exception  # type: ignore
+    APIConnectionError = Exception  # type: ignore
+    APITimeoutError = Exception  # type: ignore
+    AuthenticationError = Exception  # type: ignore
+    RateLimitError = Exception  # type: ignore
 
 from backend.services.storage import TenderStorage
 
@@ -259,6 +271,61 @@ class LiveTenderSearchEngine:
             except Exception as e:
                 logger.error("Failed to establish eproc2 session: %s", e)
                 return None, None, {}
+
+    _query_cache: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
+    _cache_lock = threading.Lock()
+    CACHE_TTL_SECONDS = 600  # 10 minutes cache TTL
+
+    @staticmethod
+    def normalize_url(raw_url: str) -> str:
+        """
+        Deduplicates and cleans URLs by stripping tracking parameters, trailing slashes,
+        and standardizing scheme/host to lowercase.
+        """
+        if not raw_url:
+            return ""
+        parsed = urllib.parse.urlparse(raw_url.strip())
+        clean_query = []
+        for k, v in urllib.parse.parse_qsl(parsed.query):
+            k_lower = k.lower()
+            if not k_lower.startswith("utm_") and k_lower not in ("ref", "fbclid", "gclid", "sessionid", "track"):
+                clean_query.append((k, v))
+        new_query = urllib.parse.urlencode(clean_query)
+        path = parsed.path.rstrip("/")
+        return urllib.parse.urlunparse((
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            path,
+            parsed.params,
+            new_query,
+            ""
+        ))
+
+    @classmethod
+    def _is_valid_tender_candidate(cls, title: str, url: str, snippet: str = "") -> bool:
+        """
+        Validates whether a search result candidate represents a genuine public procurement notice,
+        filtering out ad farms, aggregator spam, and non-procurement web pages.
+        """
+        if not url or not title:
+            return False
+        norm_url = url.lower()
+        domain = urllib.parse.urlparse(norm_url).netloc.lower()
+        if any(b in domain for b in BLOCKED_DOMAINS):
+            return False
+        if any(p in norm_url for p in BLOCKED_URL_PATTERNS):
+            return False
+
+        # Official government or procurement platforms are high-confidence signals
+        is_gov = any(gov in domain for gov in ("gov.in", "nic.in", "gem.gov.in", "ireps.gov.in"))
+        text = f"{title} {snippet}".lower()
+        procurement_signals = (
+            "tender", "bid", "rfp", "rfq", "nit", "procurement", "e-procurement",
+            "gem/", "corrigendum", "contract", "supply", "work", "works", "maintenance",
+            "eproc", "bidding", "expression of interest", "eoi", "quotation"
+        )
+        has_signal = any(sig in text for sig in procurement_signals)
+        return is_gov or has_signal
 
     def __init__(self, api_key: Optional[str] = None, storage: Optional[TenderStorage] = None):
         self.api_key = api_key or os.getenv("TINYFISH_API_KEY")
@@ -921,168 +988,253 @@ class LiveTenderSearchEngine:
         state: Optional[str] = None,
         category: Optional[str] = None,
         city: Optional[str] = None,
+        portal: Optional[str] = None,
         raw_prompt: Optional[str] = None,
         limit: int = 10,
+        nationwide: bool = False,
     ) -> List[Dict[str, Any]]:
         """
-        Executes targeted live procurement searches, inspects candidate portal DOMs in parallel,
-        enforces strict liveness validation, and returns normalized tender dicts.
+        Executes targeted, deduplicated live procurement search via TinyFish Search API:
+        1. Universal Live Coverage: Discovers live tenders across every Indian state and procurement portal.
+        2. Query Normalization & Deduplication: Checks in-memory cache to avoid repeated API requests.
+        3. Native Result Utilization: Leverages TinyFish SearchResult (title, snippet, pdf_url) as first-class tender data.
+        4. Safe Error Handling: Handles RateLimitError, AuthenticationError, and timeouts with graceful degradation.
         """
-        # Direct integration for Bihar eProcurement 2.0 (dynamic openarea REST portal)
-        is_bihar_query = (
-            state == "Bihar"
-            or (query and any(k in query.lower() for k in ("bihar", "bih", "eproc2", "buidco")))
-            or (raw_prompt and any(k in raw_prompt.lower() for k in ("bihar", "bih", "eproc2", "buidco")))
-            or bool(re.search(r"\b14\d{4}\b", query or raw_prompt or ""))
-        )
-        if is_bihar_query:
-            bihar_tenders = self._fetch_eproc2_bihar(query=query or raw_prompt, state=state, category=category)
+        # Guard: If no query terms, state, or portal provided, do NOT perform broad search
+        clean_q = (query or raw_prompt or "").strip()
+        if not clean_q and not state and not category and not portal:
+            logger.info("Live search skipped: no search query, state, or portal specified.")
+            return []
+
+        # State alias normalization if needed
+        norm_state = state.strip() if state else None
+        if norm_state and norm_state.lower() in ("all", "all states", "none", ""):
+            norm_state = None
+
+        norm_cat = category.strip() if category else None
+        norm_city = city.strip() if city else None
+        norm_portal = portal.strip() if portal else None
+
+        # 1. Cache Lookup to avoid duplicate external API calls
+        cache_key = f"{clean_q.lower()}:{str(norm_state).lower()}:{str(norm_cat).lower()}:{str(norm_city).lower()}:{str(norm_portal).lower()}:{nationwide}"
+        now_ts = time.time()
+        with self._cache_lock:
+            if cache_key in self._query_cache:
+                exp_ts, cached_items = self._query_cache[cache_key]
+                if now_ts < exp_ts:
+                    logger.info("Serving live search results from query cache for '%s'", cache_key)
+                    return cached_items[:limit]
+                else:
+                    del self._query_cache[cache_key]
+
+        # 2. Specialized RFQ ID lookup for Bihar eProc2 if a direct numeric RFQ ID is searched
+        m_rfq = re.search(r"\b(14\d{4})\b", clean_q)
+        if m_rfq:
+            bihar_tenders = self._fetch_eproc2_bihar(query=clean_q, state=norm_state or "Bihar", category=norm_cat)
             if bihar_tenders:
-                logger.info("Retrieved %d active tenders directly from eProc2 Bihar", len(bihar_tenders))
+                logger.info("Retrieved %d active tenders directly for RFQ %s from eProc2 Bihar", len(bihar_tenders), m_rfq.group(1))
+                with self._cache_lock:
+                    self._query_cache[cache_key] = (now_ts + self.CACHE_TTL_SECONDS, bihar_tenders)
                 return bihar_tenders[:limit]
 
         if not self.client:
             logger.warning("TinyFish client not initialized (missing API key or library). Skipping live search.")
             return []
 
-        search_terms = []
-        if state:
-            search_terms.append(state)
-        if city:
-            search_terms.append(city)
-        if category:
-            search_terms.append(category)
-        if query:
-            search_terms.append(query)
-        elif raw_prompt and not state and not category:
-            search_terms.append(raw_prompt)
+        # 3. Construct targeted high-precision TinyFish search query for requested state, domain, and keywords
+        terms = []
+        p_lower = norm_portal.lower() if norm_portal else None
+        if p_lower:
+            if p_lower == "gem":
+                terms.append("site:gem.gov.in")
+            elif p_lower == "cppp":
+                terms.append("site:eprocure.gov.in")
+            elif p_lower == "ireps":
+                terms.append("site:ireps.gov.in")
+            elif p_lower == "bihar":
+                terms.append("Bihar (site:eproc2.bihar.gov.in OR site:bihar.gov.in OR site:bseidc.in)")
+            elif "." in p_lower:
+                terms.append(f"site:{p_lower}")
 
-        search_query_str = " ".join(search_terms).strip()
-        if not search_query_str:
-            search_query_str = "active government tenders"
+        if norm_state and (not p_lower or p_lower != "bihar"):
+            terms.append(f'"{norm_state}"')
+        if norm_city:
+            terms.append(f'"{norm_city}"')
+        if clean_q:
+            terms.append(clean_q)
+        if norm_cat:
+            terms.append(norm_cat)
 
-        # Construct high-precision targeted queries (max 2) to prevent downstream proxy timeout
-        queries_to_try = []
-        portal = STATE_PORTAL_DOMAINS.get(state) if state else None
+        query_str = " ".join(terms).strip()
+        if not query_str:
+            query_str = "tender notice 2026"
 
-        if query and state and portal:
-            queries_to_try.append(f'"{query}" site:{portal}')
-            queries_to_try.append(f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument 2026')
-        elif query and state:
-            queries_to_try.append(f'"{query}" "{state}" site:bidplus.gem.gov.in/showbidDocument 2026')
-            queries_to_try.append(f'"{query}" "{state}" active tenders site:gov.in 2026')
-        elif state and portal:
-            queries_to_try.append(f"active tenders FrontEndViewTender site:{portal} {category or ''}".strip())
-            queries_to_try.append(f'"{state}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
-        elif query:
-            queries_to_try.append(f'"{query}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
-            queries_to_try.append(f'"{query}" active tenders FrontEndViewTender site:gov.in')
+        if p_lower:
+            targeted_q = f"{query_str} active tender 2026"
+        elif norm_state:
+            targeted_q = f'{query_str} active tender notice 2026'
+        elif nationwide:
+            targeted_q = f"{query_str} active tender notice site:gov.in 2026"
         else:
-            queries_to_try.append(f'"{search_query_str}" active tenders site:bidplus.gem.gov.in/showbidDocument 2026')
-            queries_to_try.append(f"2026 active tenders FrontEndViewTender {search_query_str}")
+            targeted_q = f"{query_str} active tender notice 2026"
 
-        candidate_urls = []
-        seen_candidate_urls = set()
-        search_start_time = time.time()
+        logger.info("Executing TinyFish live procurement search query: '%s' (state=%s, portal=%s, nationwide=%s)", targeted_q, norm_state, norm_portal, nationwide)
 
-        for q_try in queries_to_try[:2]:
-            # Enforce strict 8-second time budget so Next.js proxy never hangs up (30s limit)
-            if time.time() - search_start_time > 8.0:
-                logger.info("Live search time budget (8s) reached; finishing discovery.")
-                break
-
-            logger.info("Executing live TinyFish search: '%s'", q_try)
-            try:
-                res = self.client.search.query(
-                    q_try,
-                    purpose="Find currently active Indian government tenders and RFPs",
-                )
-                if res and res.results:
-                    for item in res.results:
-                        u = (item.url or "").strip()
-                        if u and u not in seen_candidate_urls:
-                            domain = urllib.parse.urlparse(u).netloc.lower()
-                            if domain and not any(b in domain for b in BLOCKED_DOMAINS):
-                                seen_candidate_urls.add(u)
-                                candidate_urls.append(u)
-                    if len(candidate_urls) >= 5:
-                        logger.info("Discovered %d candidate URLs; proceeding to inspection.", len(candidate_urls))
-                        break
-            except Exception as e:
-                logger.error("Live TinyFish search query failed for '%s': %s", q_try, e)
-
-        if not candidate_urls:
-            logger.info("No candidate URLs discovered for queries: %s", queries_to_try)
+        search_results = []
+        try:
+            res = self.client.search.query(
+                targeted_q,
+                purpose="Find currently active Indian government tenders, RFPs, and procurement notices",
+                location="IN",
+            )
+            if res and hasattr(res, "results") and res.results:
+                search_results = res.results
+        except RateLimitError as exc:
+            logger.warning("TinyFish rate limit exceeded (HTTP 429). Gracefully falling back: %s", exc)
+            return []
+        except AuthenticationError as exc:
+            logger.error("TinyFish authentication failed (HTTP 401). Please verify TINYFISH_API_KEY.")
+            return []
+        except (APITimeoutError, APIConnectionError) as exc:
+            logger.warning("TinyFish search request timed out or connection error: %s", exc)
+            return []
+        except Exception as exc:
+            logger.error("TinyFish search query failed: %s", exc)
             return []
 
-        # Perform parallel DOM inspection with strict liveness verification
+        if not search_results:
+            logger.info("TinyFish search returned 0 items for '%s'", targeted_q)
+            return []
+
+        # 4. Result Deduplication & Validation
+        seen_urls = set()
+        seen_numbers = set()
+        valid_candidates = []
+
+        for item in search_results:
+            raw_url = getattr(item, "url", None)
+            title = getattr(item, "title", None) or ""
+            snippet = getattr(item, "snippet", None) or ""
+            if not raw_url:
+                continue
+
+            normalized_url = self.normalize_url(raw_url)
+            if not normalized_url or normalized_url in seen_urls:
+                continue
+
+            # Validate that candidate is a genuine procurement item
+            if not self._is_valid_tender_candidate(title, normalized_url, snippet):
+                continue
+
+            seen_urls.add(normalized_url)
+            valid_candidates.append((item, normalized_url, title, snippet))
+            if len(valid_candidates) >= min(limit * 2, 20):
+                break
+
+        if not valid_candidates:
+            return []
+
+        # 5. Fast Parallel DOM Inspection for rich field enrichment (with fallback to TinyFish native metadata)
         discovered_tenders: List[Dict[str, Any]] = []
         now_iso = datetime.now(timezone.utc).isoformat()
 
-        def _worker(target_url: str):
-            return self._inspect_live_page(target_url, state=state, category=category)
+        def _enrich_candidate(cand_tuple):
+            it, norm_url, t_title, t_snippet = cand_tuple
+            # Attempt shallow DOM inspection (timeout handled safely inside _inspect_live_page)
+            inspected_list = self._inspect_live_page(norm_url, state=norm_state, category=norm_cat)
+            if inspected_list and len(inspected_list) > 0:
+                return inspected_list[0]
 
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            batch_results = executor.map(_worker, candidate_urls)
-            for items in batch_results:
-                if not items:
+            # Fallback: construct first-class tender record directly from validated TinyFish SearchResult
+            domain = urllib.parse.urlparse(norm_url).netloc
+            url_hash = hashlib.sha256(norm_url.encode()).hexdigest()[:12]
+            tender_num = f"TND/{domain.upper()}/{url_hash.upper()}"
+            pdf_url = getattr(it, "pdf_url", None)
+            has_pdf = bool(pdf_url or norm_url.lower().endswith(".pdf"))
+
+            return {
+                "source_url": norm_url,
+                "tender_number": tender_num,
+                "title": t_title.strip() or "Government Procurement Tender Notice",
+                "buyer_name": domain,
+                "portal": domain,
+                "submission_deadline": getattr(it, "date", None),
+                "estimated_value_inr": None,
+                "emd_amount_inr": None,
+                "state": norm_state or ("All India" if nationwide else "National"),
+                "category": norm_cat or "Services",
+                "tenure_months": 12,
+                "has_pdf_document": has_pdf,
+                "summary": t_snippet.strip() or f"Procurement opportunity on {domain}",
+            }
+
+        with ThreadPoolExecutor(max_workers=min(len(valid_candidates), 6)) as executor:
+            batch_enriched = executor.map(_enrich_candidate, valid_candidates)
+            for item in batch_enriched:
+                if not item:
                     continue
-                for item in items:
-                    t_url = item["source_url"]
-                    tender_id = f"tnd_live_{hashlib.sha256(t_url.encode()).hexdigest()[:12]}"
-                    val = item.get("estimated_value_inr")
-                    emd = item.get("emd_amount_inr")
-                    val_str = f"₹{val:,.2f}" if val else "Not Specified"
-                    t_state = item.get("state") or state or "All India"
-                    t_cat = item.get("category") or category or "Services"
+                t_num = item.get("tender_number") or ""
+                if t_num in seen_numbers:
+                    continue
+                seen_numbers.add(t_num)
 
-                    tender_dict = {
-                        "tender_id": tender_id,
-                        "tender_number": item["tender_number"],
-                        "title": item["title"],
-                        "buyer_name": item["buyer_name"],
-                        "state": t_state,
-                        "category": t_cat,
-                        "estimated_value_inr": val,
-                        "emd_amount_inr": emd,
-                        "tenure_months": item.get("tenure_months", 12),
-                        "submission_deadline": item["submission_deadline"],
-                        "portal": item["portal"],
-                        "source_url": t_url,
-                        "status": "ACTIVE",
-                        "summary": f"{val_str} | {t_cat} in {t_state}",
-                        "has_pdf_document": item.get("has_pdf_document", False),
-                        "is_live_discovered": True,
-                    }
-                    discovered_tenders.append(tender_dict)
+                t_url = item["source_url"]
+                tender_id = f"tnd_live_{hashlib.sha256(t_url.encode()).hexdigest()[:12]}"
+                val = item.get("estimated_value_inr")
+                emd = item.get("emd_amount_inr")
+                val_str = f"₹{val:,.2f}" if val else "Not Specified"
+                t_state = item.get("state") or norm_state or ("All India" if nationwide else "National")
+                t_cat = item.get("category") or norm_cat or "Services"
 
-                    # Persist verified live tender into SQLite cache
-                    try:
-                        import sqlite3
-                        with sqlite3.connect(self.storage.db_path) as conn:
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT OR IGNORE INTO tenders (
-                                    tender_id, organization_id, external_id, title, buyer_name,
-                                    submission_deadline, estimated_value_inr, source_url,
-                                    created_at, updated_at, state, category, tenure_months,
-                                    emd_amount_inr, location, portal
-                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                tender_id, "org_default", item["tender_number"], item["title"], item["buyer_name"],
-                                item["submission_deadline"], val, t_url,
-                                now_iso, now_iso, t_state, t_cat, 12,
-                                emd, city or t_state, item["portal"]
-                            ))
-                            conn.commit()
-                    except Exception as e:
-                        logger.debug("Failed to index live discovered tender to SQLite: %s", e)
+                tender_dict = {
+                    "tender_id": tender_id,
+                    "tender_number": item["tender_number"],
+                    "title": item["title"],
+                    "buyer_name": item["buyer_name"],
+                    "state": t_state,
+                    "category": t_cat,
+                    "estimated_value_inr": val,
+                    "emd_amount_inr": emd,
+                    "tenure_months": item.get("tenure_months", 12),
+                    "submission_deadline": item.get("submission_deadline"),
+                    "portal": item["portal"],
+                    "source_url": t_url,
+                    "status": "ACTIVE",
+                    "summary": item.get("summary") or f"{val_str} | {t_cat} in {t_state}",
+                    "has_pdf_document": item.get("has_pdf_document", False),
+                    "is_live_discovered": True,
+                }
+                discovered_tenders.append(tender_dict)
 
-                    if len(discovered_tenders) >= limit:
-                        break
+                # Persist verified live tender into database cache
+                try:
+                    import sqlite3
+                    with sqlite3.connect(self.storage.db_path) as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO tenders (
+                                tender_id, organization_id, external_id, title, buyer_name,
+                                submission_deadline, estimated_value_inr, source_url,
+                                created_at, updated_at, state, category, tenure_months,
+                                emd_amount_inr, location, portal
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            tender_id, "org_default", item["tender_number"], item["title"], item["buyer_name"],
+                            item.get("submission_deadline"), val, t_url,
+                            now_iso, now_iso, t_state, t_cat, 12,
+                            emd, norm_city or t_state, item["portal"]
+                        ))
+                        conn.commit()
+                except Exception as e:
+                    logger.debug("Failed to index live discovered tender to SQLite: %s", e)
+
                 if len(discovered_tenders) >= limit:
                     break
 
-        logger.info("Live search retrieved and verified %d genuine live tenders", len(discovered_tenders))
+        # Save into query cache
+        with self._cache_lock:
+            self._query_cache[cache_key] = (now_ts + self.CACHE_TTL_SECONDS, discovered_tenders)
+
+        logger.info("Live search retrieved and validated %d genuine tenders (cached for %ds)", len(discovered_tenders), self.CACHE_TTL_SECONDS)
         return discovered_tenders
 

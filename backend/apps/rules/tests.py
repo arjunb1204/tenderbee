@@ -48,8 +48,9 @@ class RulePackLifecycleTests(APITestCase):
     def test_list_and_detail_rule_packs(self):
         resp = self.client.get("/api/v1/rules/")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(resp.data), 1)
-        self.assertEqual(resp.data[0]["id"], self.rule_pack.id)
+        results = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["id"], self.rule_pack.id)
 
         detail_resp = self.client.get(f"/api/v1/rules/{self.rule_pack.id}/")
         self.assertEqual(detail_resp.status_code, status.HTTP_200_OK)

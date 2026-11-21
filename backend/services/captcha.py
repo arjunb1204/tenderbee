@@ -30,7 +30,7 @@ class CaptchaService:
         capsolver_api_key: Optional[str] = None,
         mock_mode: bool = False,
     ):
-        self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
+        self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY") or os.getenv("LLM_API_KEY")
         self.capsolver_api_key = capsolver_api_key or os.getenv("CAPSOLVER_API_KEY")
         self.mock_mode = mock_mode
 

@@ -1,0 +1,1238 @@
+openapi: 3.0.3
+info:
+  title: TenderBee Core API
+  version: 1.0.0
+  description: Deterministic Verification & Procurement Platform API
+paths:
+  /api/v1/audit/:
+    get:
+      operationId: v1_audit_list
+      description: |-
+        GET /api/v1/audit/
+        Retrieves paginated immutable audit trail events for the authenticated organization.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogEntryList'
+          description: ''
+  /api/v1/audit/{id}/:
+    get:
+      operationId: v1_audit_retrieve
+      description: |-
+        GET /api/v1/audit/<id>/
+        Retrieves a single immutable audit entry by ID with cross-tenant 404 protection.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogEntry'
+          description: ''
+  /api/v1/auth/login/:
+    post:
+      operationId: v1_auth_login_create
+      description: |-
+        POST /api/v1/auth/login/ (or /api/v1/auth/token/)
+        Authenticates user, enforces lockout protection and generic error responses,
+        issues tokens, and writes audit record.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/logout/:
+    post:
+      operationId: v1_auth_logout_create
+      description: |-
+        POST /api/v1/auth/logout/
+        Blacklists the active refresh token, clears auth cookies, and logs the event.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/me/:
+    get:
+      operationId: v1_auth_me_retrieve
+      description: |-
+        GET /api/v1/auth/me/
+        Returns authenticated user information, role, and organization tenant details.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/refresh/:
+    post:
+      operationId: v1_auth_refresh_create
+      description: |-
+        POST /api/v1/auth/refresh/
+        Refreshes access token, rotates refresh token, blacklists previous refresh token,
+        and updates httpOnly cookies.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/register/:
+    post:
+      operationId: v1_auth_register_create
+      description: |-
+        POST /api/v1/auth/register/
+        Registers a new tenant Organization and creates the primary Owner user.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/token/:
+    post:
+      operationId: v1_auth_token_create
+      description: |-
+        POST /api/v1/auth/login/ (or /api/v1/auth/token/)
+        Authenticates user, enforces lockout protection and generic error responses,
+        issues tokens, and writes audit record.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/auth/token/refresh/:
+    post:
+      operationId: v1_auth_token_refresh_create
+      description: |-
+        POST /api/v1/auth/refresh/
+        Refreshes access token, rotates refresh token, blacklists previous refresh token,
+        and updates httpOnly cookies.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/:
+    get:
+      operationId: v1_documents_list
+      
+      description: |-
+        GET /api/v1/documents/
+        Paginated list of documents uploaded by the current tenant organization.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBidderDocumentList'
+          description: ''
+  /api/v1/documents/{doc_id}/download/:
+    get:
+      operationId: v1_documents_download_retrieve
+      description: |-
+        GET /api/v1/documents/<doc_id>/download/
+        Authenticated endpoint verifying tenant ownership and role,
+        writing an audit log row, and streaming bytes with Content-Disposition
+        and Cache-Control: private, no-store.
+      parameters:
+      - in: path
+        name: doc_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/documents/{id}/:
+    get:
+      operationId: v1_documents_retrieve
+      description: |-
+        GET /api/v1/documents/<id>/
+        Retrieves document metadata and integrity details with cross-tenant 404 isolation.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BidderDocument'
+          description: ''
+  /api/v1/documents/jobs/{id}/:
+    get:
+      operationId: v1_documents_jobs_retrieve
+      description: |-
+        GET /api/v1/jobs/<id>/
+        Retrieves status, progress, and results of an async background job.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncJob'
+          description: ''
+  /api/v1/documents/upload/:
+    post:
+      operationId: v1_documents_upload_create
+      description: |-
+        POST /api/v1/documents/upload/
+        Accepts document upload, performs strict validation & active content stripping,
+        stores in unified storage, writes an audit row, and returns HTTP 202 with a job tracking ID.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/evidence/:
+    get:
+      operationId: v1_evidence_retrieve
+      description: |-
+        GET /api/v1/evidence/
+        Retrieves grounded evidence citations (quote, page number, bounding boxes)
+        for side-by-side evidence inspection.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/jobs/{id}/:
+    get:
+      operationId: v1_jobs_retrieve
+      description: |-
+        GET /api/v1/jobs/<id>/
+        Retrieves status, progress, and results of an async background job.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AsyncJob'
+          description: ''
+  /api/v1/rules/:
+    get:
+      operationId: v1_rules_list
+      description: |-
+        GET /api/v1/rules/
+        Lists RulePacks for the authenticated tenant organization.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRulePackList'
+          description: ''
+  /api/v1/rules/{rule_pack_id}/:
+    get:
+      operationId: v1_rules_retrieve
+      description: |-
+        GET /api/v1/rules/<id>/
+        Retrieves full details of a RulePack with cross-tenant 404 isolation.
+      parameters:
+      - in: path
+        name: rule_pack_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RulePack'
+          description: ''
+  /api/v1/rules/{rule_pack_id}/confirm/:
+    post:
+      operationId: v1_rules_confirm_create
+      description: |-
+        POST /api/v1/rules/<rule_pack_id>/confirm/
+        Cryptographically freezes a draft RulePack with SHA-256 integrity hash.
+        Strictly restricted to Reviewer and Owner roles.
+      parameters:
+      - in: path
+        name: rule_pack_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/rules/{rule_pack_id}/items/{item_id}/:
+    patch:
+      operationId: v1_rules_items_partial_update
+      description: |-
+        PATCH /api/v1/rules/<rule_pack_id>/items/<item_id>/
+        Allows human Reviewer/Owner to dismiss or modify a rule while the RulePack is in DRAFT.
+        Modifications are strictly blocked once FROZEN.
+      parameters:
+      - in: path
+        name: item_id
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: rule_pack_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/:
+    get:
+      operationId: v1_tenders_list
+      description: |-
+        GET /api/v1/tenders/
+        Lists tenders belonging strictly to the authenticated tenant organization.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTenderList'
+          description: ''
+  /api/v1/tenders/{identifier}/:
+    get:
+      operationId: v1_tenders_retrieve
+      description: |-
+        GET /api/v1/tenders/<identifier>/?mode=skim|detailed
+        Two viewing modes:
+        - 'skim': Fast high-level overview
+        - 'detailed': Complete breakdown including parsed PDF clauses, page citations, and rule pack
+      parameters:
+      - in: path
+        name: identifier
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/intake/:
+    post:
+      operationId: v1_tenders_intake_create
+      description: |-
+        POST /api/tenders/intake/
+        Accepts a procurement URL or tender number, scrapes or loads from cache,
+        and automatically drafts an executable RulePack.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/rule-pack/{rule_pack_id}/:
+    get:
+      operationId: v1_tenders_rule_pack_retrieve
+      description: |-
+        GET /api/tenders/rule-pack/<rule_pack_id>/
+        Retrieves a RulePack by ID.
+      parameters:
+      - in: path
+        name: rule_pack_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/rule-pack/{rule_pack_id}/confirm/:
+    post:
+      operationId: v1_tenders_rule_pack_confirm_create
+      description: |-
+        POST /api/tenders/rule-pack/<rule_pack_id>/confirm/
+        Locks and freezes a draft RulePack with cryptographic SHA-256 integrity hash.
+      parameters:
+      - in: path
+        name: rule_pack_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/schema/:
+    get:
+      operationId: v1_tenders_schema_retrieve
+      description: |-
+        GET /api/v1/tenders/schema/
+        Returns the formal JSON Schema for Tender Notice Extractions.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/search/:
+    get:
+      operationId: v1_tenders_search_retrieve
+      description: |-
+        GET  /api/v1/tenders/search/?q=services+in+bihar
+        POST /api/v1/tenders/search/ {"prompt": "services in bihar above 1 cr"}
+        Discovery engine supporting natural language and multi-criteria filters.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+    post:
+      operationId: v1_tenders_search_create
+      description: |-
+        GET  /api/v1/tenders/search/?q=services+in+bihar
+        POST /api/v1/tenders/search/ {"prompt": "services in bihar above 1 cr"}
+        Discovery engine supporting natural language and multi-criteria filters.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          description: No response body
+  /api/v1/tenders/upload-pdf/:
+    post:
+      operationId: v1_tenders_upload_pdf_create
+      description: |-
+        POST /api/tenders/upload-pdf/
+        Uploads an Indian procurement tender PDF, extracts clauses and parameters,
+        and returns a structured JSON schema along with a draft RulePack.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/verify/assessments/:
+    get:
+      operationId: v1_verify_assessments_list
+      description: |-
+        GET /api/v1/verify/assessments/
+        Paginated list of assessments for the authenticated tenant.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedVerificationAssessmentList'
+          description: ''
+  /api/v1/verify/assessments/{assessment_id}/override/:
+    post:
+      operationId: v1_verify_assessments_override_create
+      description: |-
+        POST /api/v1/verify/assessments/<assessment_id>/override/
+        Allows Reviewers and Owners to review and override an automated rule verdict
+        with a mandatory reason. Never deletes or mutates the original verdict data.
+      parameters:
+      - in: path
+        name: assessment_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/v1/verify/assessments/{id}/:
+    get:
+      operationId: v1_verify_assessments_retrieve
+      description: |-
+        GET /api/v1/verify/assessments/<id>/
+        Retrieves full audit report for an assessment with cross-tenant 404 isolation.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationAssessment'
+          description: ''
+  /api/v1/verify/evaluate/:
+    post:
+      operationId: v1_verify_evaluate_create
+      description: |-
+        POST /api/v1/verify/evaluate/
+        Executes the 7-stage deterministic verification pipeline for the current tenant.
+      tags:
+      - v1
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    AsyncJob:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        job_type:
+          type: string
+          readOnly: true
+        status:
+          allOf:
+          - $ref: '#/components/schemas/AsyncJobStatusEnum'
+          readOnly: true
+        progress:
+          type: integer
+          readOnly: true
+        target_id:
+          type: string
+          readOnly: true
+        result:
+          readOnly: true
+        error:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - error
+      - id
+      - job_type
+      - progress
+      - result
+      - status
+      - target_id
+      - updated_at
+    AsyncJobStatusEnum:
+      enum:
+      - PENDING
+      - PROCESSING
+      - COMPLETED
+      - FAILED
+      type: string
+      description: |-
+        * `PENDING` - Pending
+        * `PROCESSING` - Processing
+        * `COMPLETED` - Completed
+        * `FAILED` - Failed
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        event_type:
+          allOf:
+          - $ref: '#/components/schemas/EventTypeEnum'
+          readOnly: true
+        actor:
+          type: string
+          readOnly: true
+        target_id:
+          type: string
+          readOnly: true
+        payload_hash:
+          type: string
+          readOnly: true
+          description: SHA-256 hash of event payload
+        details:
+          readOnly: true
+        timestamp:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - actor
+      - details
+      - event_type
+      - id
+      - payload_hash
+      - target_id
+      - timestamp
+    BidderDocument:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        tender:
+          type: string
+          readOnly: true
+          nullable: true
+        file_name:
+          type: string
+          readOnly: true
+        document_type:
+          allOf:
+          - $ref: '#/components/schemas/DocumentTypeEnum'
+          readOnly: true
+        file_size_bytes:
+          type: integer
+          readOnly: true
+        sha256_hash:
+          type: string
+          readOnly: true
+        is_digitally_signed:
+          type: boolean
+          readOnly: true
+        signature_valid:
+          type: boolean
+          readOnly: true
+        signature_details:
+          readOnly: true
+        extracted_data:
+          readOnly: true
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - document_type
+      - extracted_data
+      - file_name
+      - file_size_bytes
+      - id
+      - is_digitally_signed
+      - sha256_hash
+      - signature_details
+      - signature_valid
+      - tender
+      - uploaded_at
+    DocumentTypeEnum:
+      enum:
+      - udyam_certificate
+      - ca_turnover_certificate
+      - nsic_registration
+      - gst_certificate
+      - pan_card
+      - work_experience_certificate
+      - banking_reference_annexure_x
+      - truthfulness_undertaking_annexure_i
+      - bid_form_annexure_ii
+      - other
+      type: string
+      description: |-
+        * `udyam_certificate` - Udyam MSME Registration
+        * `ca_turnover_certificate` - CA Turnover Certificate & Balance Sheet
+        * `nsic_registration` - NSIC Enlistment Certificate
+        * `gst_certificate` - GST Registration Certificate
+        * `pan_card` - PAN Card
+        * `work_experience_certificate` - Work Experience Certificate
+        * `banking_reference_annexure_x` - Banking Reference (Annexure X)
+        * `truthfulness_undertaking_annexure_i` - Truthfulness Undertaking (Annexure I)
+        * `bid_form_annexure_ii` - Bid Form (Annexure II)
+        * `other` - Other Compliance Document
+    EventTypeEnum:
+      enum:
+      - LOGIN
+      - LOGOUT
+      - ROLE_CHANGE
+      - RULE_PACK_CONFIRM
+      - VERDICT_OVERRIDE
+      - DOCUMENT_UPLOAD
+      - DOCUMENT_DOWNLOAD
+      - DOCUMENT_REPLACE
+      - TENDER_INTAKE
+      - RULE_PACK_DRAFTED
+      - RULE_PACK_FROZEN
+      - DOCUMENT_UPLOADED
+      - ASSESSMENT_EVALUATED
+      - REGISTRY_CHECK
+      - VERDICT_SIGNED
+      type: string
+      description: |-
+        * `LOGIN` - User Login
+        * `LOGOUT` - User Logout
+        * `ROLE_CHANGE` - User Role Changed
+        * `RULE_PACK_CONFIRM` - RulePack Confirmed
+        * `VERDICT_OVERRIDE` - Verdict Overridden
+        * `DOCUMENT_UPLOAD` - Document Uploaded
+        * `DOCUMENT_DOWNLOAD` - Document Downloaded
+        * `DOCUMENT_REPLACE` - Document Replaced
+        * `TENDER_INTAKE` - Tender Intake
+        * `RULE_PACK_DRAFTED` - RulePack Drafted
+        * `RULE_PACK_FROZEN` - RulePack Cryptographically Frozen
+        * `DOCUMENT_UPLOADED` - Document Uploaded & Verified
+        * `ASSESSMENT_EVALUATED` - Compliance Assessment Evaluated
+        * `REGISTRY_CHECK` - External Registry Verified
+        * `VERDICT_SIGNED` - Verdict Finalized and Signed
+    OverallStatusEnum:
+      enum:
+      - READY
+      - NEEDS_REVIEW
+      - BLOCKED
+      type: string
+      description: |-
+        * `READY` - Ready (Bid Compliant)
+        * `NEEDS_REVIEW` - Needs Human Review
+        * `BLOCKED` - Blocked (Ineligible or Disqualified)
+    PaginatedAuditLogEntryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+    PaginatedBidderDocumentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BidderDocument'
+    PaginatedRulePackList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RulePack'
+    PaginatedTenderList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Tender'
+    PaginatedVerificationAssessmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/VerificationAssessment'
+    RulePack:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        tender:
+          type: string
+        tender_external_id:
+          type: string
+          readOnly: true
+        version:
+          type: integer
+          readOnly: true
+          default: 1
+        status:
+          $ref: '#/components/schemas/RulePackStatusEnum'
+        content_hash:
+          type: string
+          readOnly: true
+          description: SHA-256 of active rules payload
+        frozen_hash:
+          type: string
+          readOnly: true
+          nullable: true
+        confirmed_by:
+          type: string
+          nullable: true
+          maxLength: 255
+        confirmed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+        rules_data: {}
+        reference_dates: {}
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RulePackItem'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - confirmed_at
+      - content_hash
+      - created_at
+      - frozen_hash
+      - id
+      - items
+      - tender
+      - tender_external_id
+      - updated_at
+      - version
+    RulePackItem:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        rule_id:
+          type: string
+          maxLength: 64
+        rule_type:
+          type: string
+          maxLength: 64
+        description:
+          type: string
+        document_type:
+          type: string
+          maxLength: 64
+        parameters: {}
+        quote:
+          type: string
+        page:
+          type: integer
+          maximum: 2147483647
+          minimum: -2147483648
+        is_mandatory:
+          type: boolean
+        is_dismissed:
+          type: boolean
+      required:
+      - description
+      - document_type
+      - id
+      - rule_id
+      - rule_type
+    RulePackStatusEnum:
+      enum:
+      - DRAFT
+      - FROZEN
+      - ARCHIVED
+      type: string
+      description: |-
+        * `DRAFT` - Draft
+        * `FROZEN` - Frozen
+        * `ARCHIVED` - Archived
+    Tender:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        external_id:
+          type: string
+          description: Tender Number, e.g. GEM/2026/B/894210
+          maxLength: 128
+        title:
+          type: string
+          maxLength: 500
+        buyer_name:
+          type: string
+          nullable: true
+          maxLength: 255
+        buyer_location:
+          type: string
+          nullable: true
+          maxLength: 255
+        submission_deadline:
+          type: string
+          format: date-time
+          nullable: true
+        bid_opening_date:
+          type: string
+          format: date-time
+          nullable: true
+        estimated_value_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
+          nullable: true
+        emd_amount_inr:
+          type: string
+          format: decimal
+          pattern: ^-?\d{0,16}(?:\.\d{0,2})?$
+          nullable: true
+        mse_exemption_allowed:
+          type: boolean
+        source_url:
+          type: string
+          nullable: true
+          maxLength: 1000
+        status:
+          $ref: '#/components/schemas/TenderStatusEnum'
+        snapshots:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenderSnapshot'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - external_id
+      - id
+      - snapshots
+      - title
+      - updated_at
+    TenderSnapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        content_hash:
+          type: string
+          description: SHA-256 content checksum
+          maxLength: 64
+        source_url:
+          type: string
+          maxLength: 1000
+        extracted_data: {}
+        fetched_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - content_hash
+      - fetched_at
+      - id
+    TenderStatusEnum:
+      enum:
+      - active
+      - under_review
+      - frozen
+      - archived
+      type: string
+      description: |-
+        * `active` - Active
+        * `under_review` - Under Review
+        * `frozen` - Frozen
+        * `archived` - Archived
+    VerificationAssessment:
+      type: object
+      properties:
+        id:
+          type: string
+          readOnly: true
+        tender:
+          type: string
+          readOnly: true
+        tender_external_id:
+          type: string
+          readOnly: true
+        tender_title:
+          type: string
+          readOnly: true
+        rule_pack:
+          type: string
+          readOnly: true
+        overall_status:
+          allOf:
+          - $ref: '#/components/schemas/OverallStatusEnum'
+          readOnly: true
+        verdicts_data:
+          readOnly: true
+          description: Individual rule verdicts
+        missing_documents:
+          readOnly: true
+          description: Documents required but not provided
+        fix_list:
+          readOnly: true
+          description: Actionable fixes required before bidding
+        registry_verifications:
+          readOnly: true
+          description: Live checks against official registries via TinyFish
+        verdict_overrides:
+          readOnly: true
+          description: Human reviewer verdict overrides preserving original verdicts
+        assessed_by:
+          type: string
+          readOnly: true
+        assessed_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - assessed_at
+      - assessed_by
+      - fix_list
+      - id
+      - missing_documents
+      - overall_status
+      - registry_verifications
+      - rule_pack
+      - tender
+      - tender_external_id
+      - tender_title
+      - verdict_overrides
+      - verdicts_data
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid

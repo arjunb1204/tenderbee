@@ -3,9 +3,21 @@
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
-import { getDocuments, uploadDocument, DocumentItem } from "@/lib/api";
+import {
+  getDocuments,
+  uploadDocument,
+  apiClient,
+  DocumentItem,
+  DocumentRecord,
+} from "@/lib/api";
 
-const DOC_TYPE_META: Record<string, { label: string; category: "Financial" | "Statutory" | "Technical" | "Certifications" | "Other" }> = {
+const DOC_TYPE_META: Record<
+  string,
+  {
+    label: string;
+    category: "Financial" | "Statutory" | "Technical" | "Certifications" | "Other";
+  }
+> = {
   udyam_certificate: { label: "Udyam MSME Registration", category: "Statutory" },
   ca_turnover_certificate: { label: "CA Turnover & Balance Sheet", category: "Financial" },
   nsic_registration: { label: "NSIC Enlistment Certificate", category: "Technical" },
@@ -15,6 +27,8 @@ const DOC_TYPE_META: Record<string, { label: string; category: "Financial" | "St
   banking_reference_annexure_x: { label: "Banking Reference (Annexure X)", category: "Financial" },
   truthfulness_undertaking_annexure_i: { label: "Truthfulness Undertaking (Annexure I)", category: "Statutory" },
   bid_form_annexure_ii: { label: "Bid Form (Annexure II)", category: "Statutory" },
+  solvency_certificate: { label: "Bank Solvency Certificate", category: "Financial" },
+  iso_certificate: { label: "ISO Compliance Attestation", category: "Certifications" },
   other: { label: "Compliance Document", category: "Other" },
 };
 
@@ -40,6 +54,7 @@ export default function DocumentVaultPage() {
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [uploadSuccessMsg, setUploadSuccessMsg] = useState<string | null>(null);
   const [uploadErrorMsg, setUploadErrorMsg] = useState<string | null>(null);
+  const [jobProgress, setJobProgress] = useState<{ active: boolean; progress: number; status: string } | null>(null);
 
   // Inspection modal state
   const [inspectedDoc, setInspectedDoc] = useState<DocumentItem | null>(null);
@@ -51,7 +66,13 @@ export default function DocumentVaultPage() {
     setIsLoading(true);
     try {
       const data = await getDocuments();
-      setDocuments(data);
+      if (Array.isArray(data) && data.length > 0) {
+        setDocuments(data);
+      } else {
+        const res = await apiClient.documents.list();
+        const items = Array.isArray(res) ? res : res.results || [];
+        setDocuments(items);
+      }
     } catch (err) {
       console.error("Failed to load documents", err);
     } finally {
@@ -76,23 +97,51 @@ export default function DocumentVaultPage() {
     setIsUploading(true);
     setUploadProgress("Hashing SHA-256 and validating cryptographic signature...");
     setUploadErrorMsg(null);
+    setJobProgress({ active: true, progress: 20, status: "Uploading & computing SHA-256 hash..." });
 
     try {
-      const res = await uploadDocument(selectedFile, selectedDocType);
-      if (res.success && res.document) {
-        setUploadSuccessMsg(`Document "${res.document.file_name}" uploaded and cryptographically indexed!`);
-        setShowUploadModal(false);
-        setSelectedFile(null);
-        await fetchDocs();
-        setTimeout(() => setUploadSuccessMsg(null), 5000);
-      } else {
-        setUploadErrorMsg(res.error || "Upload failed. Please verify the document format.");
+      const res = await apiClient.documents.upload(selectedFile, selectedDocType);
+      if (res && res.job_id) {
+        setJobProgress({ active: true, progress: 45, status: "Async OCR & Digital Signature Verification in progress..." });
+        await apiClient.jobs.poll(
+          res.job_id,
+          (job) => {
+            setJobProgress({
+              active: job.status === "PENDING" || job.status === "PROCESSING",
+              progress: job.progress || 70,
+              status: job.status === "COMPLETED" ? "Verification & Storage Complete!" : "Processing Document AI Pipeline...",
+            });
+          },
+          25,
+          1000
+        );
       }
+
+      setUploadSuccessMsg(`Document "${selectedFile.name}" uploaded and cryptographically indexed!`);
+      setShowUploadModal(false);
+      setSelectedFile(null);
+      await fetchDocs();
+      setTimeout(() => setUploadSuccessMsg(null), 5000);
     } catch (err: any) {
-      setUploadErrorMsg(err.message || "Failed to upload document");
+      // Fallback to uploadDocument helper
+      try {
+        const fallbackRes = await uploadDocument(selectedFile, selectedDocType);
+        if (fallbackRes.success && fallbackRes.document) {
+          setUploadSuccessMsg(`Document "${fallbackRes.document.file_name}" uploaded and cryptographically indexed!`);
+          setShowUploadModal(false);
+          setSelectedFile(null);
+          await fetchDocs();
+          setTimeout(() => setUploadSuccessMsg(null), 5000);
+        } else {
+          setUploadErrorMsg(fallbackRes.error || "Upload failed. Please verify document format.");
+        }
+      } catch (innerErr: any) {
+        setUploadErrorMsg(innerErr.message || "Failed to upload document");
+      }
     } finally {
       setIsUploading(false);
       setUploadProgress("");
+      setTimeout(() => setJobProgress(null), 3000);
     }
   };
 
@@ -111,7 +160,7 @@ export default function DocumentVaultPage() {
     const matchesQuery =
       !q ||
       doc.file_name.toLowerCase().includes(q) ||
-      doc.sha256_hash.toLowerCase().includes(q) ||
+      (doc.sha256_hash && doc.sha256_hash.toLowerCase().includes(q)) ||
       doc.document_type.toLowerCase().includes(q) ||
       meta.label.toLowerCase().includes(q);
     return matchesCategory && matchesQuery;
@@ -154,7 +203,7 @@ export default function DocumentVaultPage() {
                   className="flex items-center gap-2 rounded-xl neu-button-primary px-4 py-2.5 text-xs font-semibold cursor-pointer"
                 >
                   <span className="material-symbols-outlined text-sm">upload_file</span>
-                  Upload & Validate Document
+                  Upload &amp; Validate Document
                 </button>
 
                 <button
@@ -169,6 +218,25 @@ export default function DocumentVaultPage() {
               </div>
             </div>
 
+            {/* Async Job Progress Bar */}
+            {jobProgress && (
+              <div className="rounded-2xl neu-flat bg-surface-container-low p-4 border border-secondary/30 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-ping" />
+                    <span className="text-xs font-bold text-primary">Document AI Pipeline: {jobProgress.status}</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-secondary">{jobProgress.progress}%</span>
+                </div>
+                <div className="w-full bg-surface-container-high h-2 rounded-full overflow-hidden">
+                  <div
+                    className="bg-secondary h-full rounded-full transition-all duration-300"
+                    style={{ width: `${jobProgress.progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Success Banner */}
             {uploadSuccessMsg && (
               <div className="flex items-center justify-between rounded-xl neu-flat bg-emerald-50/90 p-4 text-emerald-900 transition">
@@ -179,7 +247,26 @@ export default function DocumentVaultPage() {
                     <p className="text-sm font-semibold">{uploadSuccessMsg}</p>
                   </div>
                 </div>
-                <span className="material-symbols-outlined cursor-pointer text-emerald-700" onClick={() => setUploadSuccessMsg(null)}>
+                <span
+                  className="material-symbols-outlined cursor-pointer text-emerald-700"
+                  onClick={() => setUploadSuccessMsg(null)}
+                >
+                  close
+                </span>
+              </div>
+            )}
+
+            {/* Error Banner */}
+            {uploadErrorMsg && (
+              <div className="flex items-center justify-between rounded-xl neu-flat bg-rose-50/80 p-4 text-rose-900 border border-rose-200">
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-rose-600">error</span>
+                  <p className="text-sm font-semibold">{uploadErrorMsg}</p>
+                </div>
+                <span
+                  className="material-symbols-outlined cursor-pointer text-rose-700"
+                  onClick={() => setUploadErrorMsg(null)}
+                >
                   close
                 </span>
               </div>
@@ -242,7 +329,7 @@ export default function DocumentVaultPage() {
               </div>
               <p className="mt-3 font-semibold text-primary">Upload your tender compliance documents</p>
               <p className="mt-1 text-xs text-on-surface-variant">
-                Accepts PDF & P7S up to 50MB. Auto-runs SHA-256 integrity, pyHanko cryptographic signature check, and OCR field extraction.
+                Accepts PDF &amp; P7S up to 50MB. Auto-runs SHA-256 integrity, pyHanko cryptographic signature check, and OCR field extraction.
               </p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <button
@@ -304,7 +391,7 @@ export default function DocumentVaultPage() {
                       <tr className="border-b border-[#E9DFE4] bg-[#F8F2F6] font-semibold text-[#735368]">
                         <th className="px-6 py-4">DOCUMENT / CREDENTIAL</th>
                         <th className="px-4 py-4">CATEGORY</th>
-                        <th className="px-4 py-4">SHA-256 & SIGNATURE INTEGRITY</th>
+                        <th className="px-4 py-4">SHA-256 &amp; SIGNATURE INTEGRITY</th>
                         <th className="px-4 py-4">DATE INDEXED</th>
                         <th className="px-6 py-4 text-right">ACTIONS</th>
                       </tr>
@@ -313,6 +400,10 @@ export default function DocumentVaultPage() {
                       {filteredDocs.map((doc) => {
                         const meta = DOC_TYPE_META[doc.document_type] || { category: "Other", label: doc.document_type };
                         const isSigned = doc.is_digitally_signed || doc.signature_valid;
+                        const docDownloadUrl = doc.id
+                          ? apiClient.documents.downloadUrl(doc.id)
+                          : (doc as any).file_url || "#";
+
                         return (
                           <tr key={doc.id} className="transition hover:bg-[#FAF5F8]">
                             {/* Document Title & File Info */}
@@ -364,10 +455,18 @@ export default function DocumentVaultPage() {
                             {/* Actions */}
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
+                                <a
+                                  href={docDownloadUrl}
+                                  download
+                                  title="Download verified document"
+                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#E9DFE4] bg-white text-[#735368] hover:bg-[#F3EBF0] hover:text-[#480870]"
+                                >
+                                  <span className="material-symbols-outlined text-sm">download</span>
+                                </a>
                                 <button
                                   type="button"
                                   onClick={() => setInspectedDoc(doc)}
-                                  title="View cryptographic details & extracted fields"
+                                  title="View cryptographic details &amp; extracted fields"
                                   className="flex h-8 items-center gap-1.5 rounded-lg border border-[#E9DFE4] bg-white px-2.5 text-[#735368] hover:bg-[#F3EBF0] hover:text-[#480870] cursor-pointer"
                                 >
                                   <span className="material-symbols-outlined text-sm">visibility</span>
@@ -385,7 +484,7 @@ export default function DocumentVaultPage() {
 
               {!isLoading && filteredDocs.length === 0 && (
                 <div className="p-12 text-center text-sm text-[#735368]">
-                  No compliance documents match your criteria. Click "Upload & Validate Document" to add one.
+                  No compliance documents match your criteria. Click &quot;Upload &amp; Validate Document&quot; to add one.
                 </div>
               )}
             </div>
@@ -409,7 +508,7 @@ export default function DocumentVaultPage() {
                   setSelectedFile(null);
                   setUploadErrorMsg(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 cursor-pointer"
               >
                 <span className="material-symbols-outlined">close</span>
               </button>
@@ -423,7 +522,7 @@ export default function DocumentVaultPage() {
                 <select
                   value={selectedDocType}
                   onChange={(e) => setSelectedDocType(e.target.value)}
-                  className="w-full rounded-xl border border-gray-300 p-2.5 text-xs font-medium text-gray-800 outline-none focus:border-[#480870]"
+                  className="w-full rounded-xl border border-gray-300 p-2.5 text-xs font-medium text-gray-800 outline-none focus:border-[#480870] cursor-pointer"
                 >
                   {Object.entries(DOC_TYPE_META).map(([key, item]) => (
                     <option key={key} value={key}>
@@ -471,7 +570,7 @@ export default function DocumentVaultPage() {
                   type="button"
                   onClick={() => setShowUploadModal(false)}
                   disabled={isUploading}
-                  className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -568,7 +667,7 @@ export default function DocumentVaultPage() {
               <div className="rounded-xl bg-gray-50 p-4 border border-gray-200">
                 <h4 className="font-bold text-gray-800 mb-2 flex items-center gap-1.5">
                   <span className="material-symbols-outlined text-sm">data_object</span>
-                  Extracted OCR & Registry Fields
+                  Extracted OCR &amp; Registry Fields
                 </h4>
                 {inspectedDoc.extracted_data && Object.keys(inspectedDoc.extracted_data).length > 0 ? (
                   <pre className="bg-white p-3 rounded-lg border border-gray-200 text-[11px] font-mono text-gray-800 overflow-x-auto">
@@ -584,7 +683,7 @@ export default function DocumentVaultPage() {
               <button
                 type="button"
                 onClick={() => setInspectedDoc(null)}
-                className="rounded-xl neu-button px-4 py-2 text-xs font-semibold text-gray-700"
+                className="rounded-xl neu-button px-4 py-2 text-xs font-semibold text-gray-700 cursor-pointer"
               >
                 Close
               </button>

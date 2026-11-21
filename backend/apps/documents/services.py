@@ -208,17 +208,20 @@ class DocumentPipelineService:
 
     def verify_stored_document(self, document: BidderDocument) -> None:
         """Fail closed if the stored source PDF is unavailable or no longer matches its digest."""
+        from backend.services import storage
         stored_path = str(document.file_path)
-        path = Path(stored_path)
-        if path.is_file():
-            content = path.read_bytes()
-        else:
-            parsed = urlsplit(stored_path)
-            key = unquote(parsed.path).lstrip("/") if parsed.scheme else stored_path.lstrip("/")
-            bucket = getattr(self.r2_storage, "bucket_name", None)
-            if bucket and key.startswith(f"{bucket}/"):
-                key = key[len(bucket) + 1:]
-            content = self.r2_storage.download_bytes(key)
+        content = storage.get(stored_path)
+        if not content:
+            path = Path(stored_path)
+            if path.is_file():
+                content = path.read_bytes()
+            else:
+                parsed = urlsplit(stored_path)
+                key = unquote(parsed.path).lstrip("/") if parsed.scheme else stored_path.lstrip("/")
+                bucket = getattr(self.r2_storage, "bucket_name", None)
+                if bucket and key.startswith(f"{bucket}/"):
+                    key = key[len(bucket) + 1:]
+                content = self.r2_storage.download_bytes(key)
 
         if not content:
             raise ValueError("Stored source PDF is unavailable; refusing verification.")

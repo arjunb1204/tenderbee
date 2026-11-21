@@ -5,7 +5,10 @@ import Image from "next/image";
 import Sidebar from "@/components/Sidebar";
 import DashboardHeader from "@/components/DashboardHeader";
 
+import { apiClient, UserProfile } from "@/lib/api";
+
 export default function SettingsPage() {
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [activeTab, setActiveTab] = useState<"profile" | "portals" | "audit" | "notifications" | "team">("profile");
   const [isSaved, setIsSaved] = useState<boolean>(false);
 
@@ -25,7 +28,22 @@ export default function SettingsPage() {
   const [udinVerificationStrict, setUdinVerificationStrict] = useState(true);
   const [smsUrgentAlerts, setSmsUrgentAlerts] = useState(true);
 
+  React.useEffect(() => {
+    apiClient.auth.me().then((user) => {
+      setCurrentUser(user);
+      if (user.organization) {
+        if (user.organization.name) setCompanyName(user.organization.name);
+        if (user.organization.gstin) setGstin(user.organization.gstin);
+        if (user.organization.udyam_number) setUdyamNo(user.organization.udyam_number);
+        if (user.organization.pan) setPan(user.organization.pan);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const isOwner = currentUser?.role === "owner" || currentUser?.role === "admin";
+
   const handleSave = () => {
+    if (!isOwner) return;
     setIsSaved(true);
     setTimeout(() => setIsSaved(false), 3500);
   };
@@ -60,12 +78,24 @@ export default function SettingsPage() {
             <button
               type="button"
               onClick={handleSave}
-              className="flex items-center gap-2 rounded-xl neu-button-primary px-5 py-2.5 text-xs font-semibold cursor-pointer"
+              disabled={!isOwner}
+              className="flex items-center gap-2 rounded-xl neu-button-primary px-5 py-2.5 text-xs font-semibold cursor-pointer disabled:opacity-40"
+              title={!isOwner ? "Only Organization Owners can save settings" : "Save Preferences"}
             >
               <span className="material-symbols-outlined text-sm">save</span>
               Save Preferences
             </button>
           </div>
+
+          {/* Role restriction alert for non-owners */}
+          {currentUser && !isOwner && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl neu-flat bg-amber-50/80 p-4 text-amber-900 border border-amber-200 text-xs">
+              <span className="material-symbols-outlined text-amber-600 text-base">shield_person</span>
+              <span>
+                Role: <strong className="uppercase font-bold">{currentUser.role}</strong>. You have read-only permissions for organization settings. Modifying profile or team members requires the <strong>Owner</strong> role.
+              </span>
+            </div>
+          )}
 
           {/* Save feedback banner */}
           {isSaved && (

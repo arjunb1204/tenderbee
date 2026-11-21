@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { searchTenders, TenderItem } from "@/lib/api";
+import { searchTenders, apiClient, TenderItem, TenderSummary } from "@/lib/api";
 import { formatINR } from "@/lib/utils";
 
 export default function TendersList() {
@@ -13,8 +13,29 @@ export default function TendersList() {
     async function load() {
       try {
         const res = await searchTenders({ limit: 4 });
-        if (res.success && res.results) {
+        if (res.success && res.results && res.results.length > 0) {
           setTenders(res.results);
+        } else {
+          // Fallback to apiClient.tenders.list()
+          const listRes = await apiClient.tenders.list();
+          const items: TenderSummary[] = Array.isArray(listRes) ? listRes : listRes.results || [];
+          if (items.length > 0) {
+            setTenders(
+              items.map((t) => ({
+                tender_id: t.tender_id,
+                tender_number: t.tender_number || t.tender_id,
+                title: t.title,
+                buyer_name: t.buyer_name,
+                portal: t.portal,
+                state: t.state,
+                category: t.category,
+                estimated_value_inr: t.estimated_value_inr ?? undefined,
+                emd_amount_inr: t.emd_amount_inr ?? undefined,
+                submission_deadline: t.submission_deadline ?? undefined,
+                status: t.status,
+              })) as TenderItem[]
+            );
+          }
         }
       } catch (e) {
         console.error("Dashboard TendersList load error:", e);
@@ -34,16 +55,16 @@ export default function TendersList() {
             Live Procurement Index
           </span>
           <h2 className="font-serif text-2xl sm:text-3xl font-bold text-primary">
-            Active Tenders
+            Active Tenders &amp; Tracked Bids
           </h2>
         </div>
         <div className="flex items-center gap-2">
           <Link
             href="/tenders"
-            className="px-3.5 py-1.5 rounded-full neu-button text-on-surface text-xs font-bold flex items-center gap-1.5 cursor-pointer hover:bg-surface-container transition-all"
+            className="px-3.5 py-1.5 rounded-full neu-button-primary text-xs font-semibold flex items-center gap-1.5"
           >
-            <span>View All Tenders</span>
-            <span className="material-symbols-outlined text-base">arrow_forward</span>
+            <span className="material-symbols-outlined text-sm">search</span>
+            <span>Search &amp; Intake Tenders</span>
           </Link>
         </div>
       </div>
@@ -57,7 +78,7 @@ export default function TendersList() {
 
       {!loading && tenders.length === 0 && (
         <div className="p-8 text-center bg-surface-container-lowest neu-flat rounded-2xl text-xs text-on-surface-variant">
-          No live tenders indexed yet. Click &quot;View All Tenders&quot; to discover opportunities.
+          No live tenders indexed yet. Click &quot;Search &amp; Intake Tenders&quot; to discover opportunities.
         </div>
       )}
 
@@ -72,7 +93,7 @@ export default function TendersList() {
 
           return (
             <div
-              key={tender.tender_id}
+              key={tender.tender_id || tender.tender_number}
               className="bg-surface-container-lowest neu-flat rounded-2xl p-6 flex flex-col gap-4 hover:-translate-y-0.5 transition-transform"
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -106,7 +127,9 @@ export default function TendersList() {
                       </span>
                       <span className="text-[10px] text-on-surface-variant flex items-center gap-1 font-medium">
                         <span className="material-symbols-outlined text-sm">schedule</span>
-                        {tender.submission_deadline ? tender.submission_deadline.split("T")[0] : "Active Notice"}
+                        {tender.submission_deadline
+                          ? tender.submission_deadline.split("T")[0]
+                          : "Active Notice"}
                       </span>
                     </div>
                     <h3 className="font-serif text-lg sm:text-xl text-primary mt-1 font-bold">
@@ -156,8 +179,10 @@ export default function TendersList() {
                     Category
                   </span>
                   <span className="text-xs font-medium text-on-surface mt-0.5 flex items-center gap-1">
-                    <span className="material-symbols-outlined text-on-surface-variant text-base">category</span>
-                    {tender.category || "Services"}
+                    <span className="material-symbols-outlined text-on-surface-variant text-base">
+                      category
+                    </span>
+                    {tender.category || "Services & Works"}
                   </span>
                 </div>
               </div>
@@ -172,8 +197,8 @@ export default function TendersList() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/tenders`}
-                    className="px-4 py-1.5 rounded-full neu-button text-xs font-semibold text-primary hover:bg-surface-container transition-all"
+                    href={`/tenders?tender_id=${encodeURIComponent(tender.tender_number)}`}
+                    className="px-4 py-1.5 rounded-full neu-button text-xs font-semibold text-primary hover:bg-surface-container transition-all cursor-pointer"
                   >
                     View Details
                   </Link>

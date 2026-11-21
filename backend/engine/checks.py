@@ -103,6 +103,9 @@ class ComplianceEngine:
                     )
                 )
 
+        if missing_docs:
+            overall_status = VerdictStatus.BLOCKED
+
         readiness = (
             ReadinessState.BLOCKED
             if overall_status == VerdictStatus.BLOCKED

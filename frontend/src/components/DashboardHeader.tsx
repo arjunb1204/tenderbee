@@ -1,14 +1,31 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { apiClient, UserProfile } from "@/lib/api";
 
 export default function DashboardHeader() {
+  const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [headerSearch, setHeaderSearch] = useState("");
-  const router = useRouter();
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    apiClient.auth
+      .me()
+      .then((user) => {
+        if (isMounted) setCurrentUser(user);
+      })
+      .catch(() => {
+        // Fallback for demo / offline view
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -16,6 +33,17 @@ export default function DashboardHeader() {
       router.push(`/tenders?q=${encodeURIComponent(headerSearch.trim())}`);
     } else {
       router.push("/tenders");
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await apiClient.auth.logout();
+    } catch {
+      // Ignored
+    } finally {
+      router.push("/login");
+      router.refresh();
     }
   };
 
@@ -80,21 +108,32 @@ export default function DashboardHeader() {
 
           <div className="h-6 w-px bg-white/70 shadow-sm hidden sm:block" />
 
-          {/* User Profile */}
-          <Link href="/settings" className="flex items-center gap-2.5 pl-1 group cursor-pointer">
-            <div className="flex flex-col text-right hidden sm:flex">
-              <span className="text-xs font-semibold text-on-surface group-hover:text-primary transition-colors leading-tight">
-                Govind K.
-              </span>
-              <span className="text-[10px] font-semibold text-on-surface-variant uppercase tracking-wider">
-                CISO • Lead Bidder
-              </span>
-            </div>
-            {/* User Avatar */}
-            <div className="w-9 h-9 rounded-full neu-flat-sm flex items-center justify-center text-on-secondary-fixed bg-secondary-fixed font-bold text-xs ring-2 ring-white shadow-sm overflow-hidden group-hover:scale-105 transition-all">
-              <span className="material-symbols-outlined text-lg">person</span>
-            </div>
-          </Link>
+          {/* User Profile & Logout */}
+          <div className="flex items-center gap-2">
+            <Link href="/settings" className="flex items-center gap-2.5 pl-1 group cursor-pointer">
+              <div className="flex flex-col text-right hidden sm:flex">
+                <span className="text-xs font-semibold text-on-surface group-hover:text-primary transition-colors leading-tight">
+                  {currentUser ? (currentUser.username || currentUser.email.split("@")[0]) : "Loading..."}
+                </span>
+                <span className="text-[10px] font-semibold text-amber-600 uppercase tracking-wider">
+                  {currentUser ? currentUser.role : "Member"} • {currentUser?.organization?.name ? currentUser.organization.name.slice(0, 16) + '...' : "Workspace"}
+                </span>
+              </div>
+              {/* User Avatar */}
+              <div className="w-9 h-9 rounded-full neu-flat-sm flex items-center justify-center text-on-secondary-fixed bg-secondary-fixed font-bold text-xs ring-2 ring-white shadow-sm overflow-hidden group-hover:scale-105 transition-all">
+                <span className="material-symbols-outlined text-lg">person</span>
+              </div>
+            </Link>
+
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-xl neu-button text-slate-500 hover:text-rose-600 transition-colors ml-1 cursor-pointer"
+              title="Sign Out"
+              aria-label="Sign Out"
+            >
+              <span className="material-symbols-outlined text-lg">logout</span>
+            </button>
+          </div>
         </div>
       </header>
 

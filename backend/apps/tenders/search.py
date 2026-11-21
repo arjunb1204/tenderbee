@@ -174,6 +174,8 @@ class TenderSearchFilter(BaseModel):
     max_tenure_months: Optional[int] = Field(default=None, description="Maximum contract period in months")
     buyer_name: Optional[str] = Field(default=None, description="Issuing authority / department")
     active_only: bool = Field(default=True, description="Filter only active tenders with upcoming deadlines")
+    nationwide: bool = Field(default=False, description="Explicit nationwide search")
+    portal: Optional[str] = Field(default=None, description="Target procurement portal or domain (GeM, CPPP, Bihar, IREPS)")
     page: int = Field(default=1, ge=1)
     limit: int = Field(default=20, ge=1, le=100)
 
@@ -478,11 +480,43 @@ class TenderSearchService:
             except Exception:
                 self.live_search_engine = None
 
+    def parse_prompt_to_filters(self, prompt: str) -> TenderSearchFilter:
+        """Helper to parse raw natural language prompt into structured filters."""
+        return QueryParser.parse(prompt, llm_adapter=self.llm_adapter)
+
     def search(self, filters: TenderSearchFilter, raw_prompt: Optional[str] = None) -> Dict[str, Any]:
         """
         Execute search query across local index and connected portals.
+        Strictly enforces state boundaries and avoids broad all-state fetches when unrequested.
         """
-        # 1. Search local indexed database
+        # Check if specific query criteria were requested
+        has_criteria = bool(
+            filters.query
+            or filters.tender_number
+            or filters.state
+            or filters.category
+            or filters.portal
+            or filters.buyer_name
+            or filters.min_value_inr is not None
+            or filters.max_value_inr is not None
+            or filters.nationwide
+            or raw_prompt
+        )
+
+        # Empty criteria guard: avoid unscoped broad web scrapes when no search parameters are given
+        if not has_criteria:
+            return {
+                "success": True,
+                "applied_filters": filters.model_dump(),
+                "total_matches": 0,
+                "page": filters.page,
+                "limit": filters.limit,
+                "source": "empty_criteria",
+                "results": [],
+                "message": "Please enter a search query or select a state to discover tenders.",
+            }
+
+        # 1. Local indexed database lookup: check locally stored / previously ingested tenders
         local_results = self.storage.search_indexed_tenders(
             query=filters.query,
             tender_number=filters.tender_number,
@@ -532,14 +566,25 @@ class TenderSearchService:
         # 3. If no local matches, automatically trigger live procurement portal search!
         if total_count == 0 and self.live_search_engine:
             logger.info("No local match found. Dispatching live portal search for filters %s", filters.model_dump())
-            live_tenders = self.live_search_engine.search_live(
-                query=filters.tender_number or filters.query,
-                state=filters.state,
-                category=filters.category,
-                city=filters.city_or_district,
-                raw_prompt=raw_prompt or filters.tender_number,
-                limit=filters.limit,
-            )
+            live_kwargs = {
+                "query": filters.tender_number or filters.query,
+                "state": filters.state,
+                "category": filters.category,
+                "city": filters.city_or_district,
+                "raw_prompt": raw_prompt or filters.tender_number,
+                "limit": filters.limit,
+            }
+            if hasattr(self.live_search_engine, "search_live"):
+                import inspect
+                try:
+                    sig = inspect.signature(self.live_search_engine.search_live)
+                    if "portal" in sig.parameters:
+                        live_kwargs["portal"] = filters.portal
+                    if "nationwide" in sig.parameters:
+                        live_kwargs["nationwide"] = filters.nationwide
+                except Exception:
+                    pass
+            live_tenders = self.live_search_engine.search_live(**live_kwargs)
             if live_tenders:
                 return {
                     "success": True,
@@ -604,7 +649,6 @@ class TenderSearchService:
 
                 with ThreadPoolExecutor(max_workers=min(len(missing), 8)) as ex:
                     list(ex.map(_enrich_worker, missing))
-
         return {
             "success": True,
             "applied_filters": filters.model_dump(),

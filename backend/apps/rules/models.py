@@ -46,6 +46,12 @@ class RulePack(TenantAwareModel):
     def save(self, *args, **kwargs):
         if not self.id:
             self.id = f"rp_{uuid.uuid4().hex[:12]}"
+        if self.pk:
+            # Enforce immutability if already frozen
+            existing = RulePack.objects.filter(pk=self.pk).values("status").first()
+            if existing and existing["status"] == RulePackStatus.FROZEN:
+                from django.core.exceptions import PermissionDenied
+                raise PermissionDenied("A frozen RulePack is immutable and cannot be modified.")
         super().save(*args, **kwargs)
 
     def compute_hash(self) -> str:
@@ -103,6 +109,8 @@ class RulePack(TenantAwareModel):
         from django.utils import timezone
         if not confirmed_by_name or not confirmed_by_name.strip():
             raise ValueError("A non-empty reviewer identity is required to freeze a rule pack.")
+        if self.status == RulePackStatus.FROZEN:
+            return
         self.status = RulePackStatus.FROZEN
         self.confirmed_by = confirmed_by_name.strip()
         self.confirmed_at = timezone.now()

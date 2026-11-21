@@ -128,8 +128,9 @@ class TenderAPITests(APITestCase):
 
         resp = self.client.get("/api/v1/tenders/")
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(len(resp.data), 1)
-        self.assertEqual(resp.data[0]["external_id"], "GEM/2026/B/999111")
+        results = resp.data.get("results", resp.data) if isinstance(resp.data, dict) else resp.data
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["external_id"], "GEM/2026/B/999111")
 
     def test_get_tender_detail(self):
         resp = self.client.get(f"/api/v1/tenders/{self.tender.id}/")

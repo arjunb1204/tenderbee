@@ -9,6 +9,8 @@ __pycache__/
 env/
 venv/
 bee/
+staticfiles/
+*.log
 
 # Node
 node_modules/
@@ -38,3 +40,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 *.swp
+
+# Memory & Scratch
+backend_memory.md
+.backend_memory.md
+
